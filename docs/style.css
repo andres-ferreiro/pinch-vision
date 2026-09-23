@@ -48,6 +48,9 @@ html, body {
 }
 
 #view { background: #000; }
+
+/* Letterboxing shows the whole frame; the bars should read as part of the UI. */
+#stage { background: #05060a; }
 #overlay { pointer-events: none; }
 
 /* ------------------------------------------------------------------ top bar */

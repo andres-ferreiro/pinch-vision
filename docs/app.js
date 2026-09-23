@@ -96,6 +96,7 @@ const state = {
   skeleton: store.get('skeleton', true),
   blendPos: 0,
   blendFade: 0,
+  fit: 'cover',
   fps: 0,
   lastFrame: 0,
   handsSeen: 0,
@@ -151,6 +152,16 @@ function stationMeta(id) {
 }
 
 // ------------------------------------------------------------------ rendering
+
+/**
+ * A landscape camera frame inside a portrait phone loses most of its width to
+ * `object-fit: cover` — and for a hand app that means your hands are tracked
+ * but not visible. When the aspects disagree badly, letterbox instead.
+ */
+function fitFor(rw, rh, cw, ch) {
+  const ratio = (rw / rh) / (cw / ch);
+  return (ratio > 1.35 || ratio < 0.74) ? 'contain' : 'cover';
+}
 
 function sizeFor(video) {
   const vw = video.videoWidth || 1280;
@@ -241,6 +252,12 @@ function loop() {
   const [w, h] = sizeFor(video);
   state.renderer.setSize(w, h);
 
+  const fit = fitFor(w, h, ui.canvas.clientWidth, ui.canvas.clientHeight);
+  if (fit !== state.fit) {
+    state.fit = fit;
+    ui.canvas.style.objectFit = fit;
+  }
+
   const now = performance.now();
   const result = state.landmarker.detectForVideo(video, now);
 
@@ -324,7 +341,10 @@ function drawSkeleton() {
 
   const rw = state.renderer.width, rh = state.renderer.height;
   if (!rw || !rh) return;
-  const scale = Math.max(cw / rw, ch / rh);          // the cover transform
+  // Mirror whichever fit the view is using, or the skeleton drifts off the hand.
+  const scale = state.fit === 'contain'
+    ? Math.min(cw / rw, ch / rh)
+    : Math.max(cw / rw, ch / rh);
   const dw = rw * scale, dh = rh * scale;
   const ox = (cw - dw) / 2, oy = (ch - dh) / 2;
   const at = (lm) => [ox + (1 - lm.x) * dw, oy + lm.y * dh];
@@ -538,8 +558,16 @@ async function begin() {
   ui.startBtn.disabled = true;
   ui.startNote.textContent = 'requesting camera…';
   try {
+    const portrait = window.matchMedia('(orientation: portrait)').matches
+      && Math.min(screen.width, screen.height) < 600;
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+      video: {
+        facingMode: 'user',
+        // Ask for a stream shaped like the screen. Phones usually honour this;
+        // where they do not, fitFor() letterboxes rather than cropping hands away.
+        width: { ideal: portrait ? 720 : 1280 },
+        height: { ideal: portrait ? 1280 : 720 },
+      },
       audio: false,
     });
     ui.video.srcObject = stream;
