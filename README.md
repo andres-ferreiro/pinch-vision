@@ -138,6 +138,20 @@ The browser version is the same instrument with a simpler control scheme: it is
 **pinch-only** — how closed your pinch is *is* the effect strength, no grabbing
 or twisting — plus the thumb-to-pinky tap to change effect, and clip recording.
 
+Three toggles sit in the top bar, and all three persist in `localStorage`:
+
+* **SKEL** — draw the tracked hand skeleton over the picture, with a pinch ring
+  that closes as your fingers meet. It is a separate 2D canvas stacked on the
+  WebGL one, so the effects never have to know about it.
+* **BLEND** — replaces per-hand effects with a two-handed instrument: one hand
+  **sweeps** the rack, the other **fades** the whole chain back toward the clean
+  camera. The sweep is rate-limited to `SWEEP_RATE` (0.22/s, so a full pass
+  takes ~4.5s) because mapping eight effects straight onto one pinch turned
+  every twitch into a jump cut.
+* **⇄** — swap which hand drives which card, carrying each hand's chosen effect
+  across with it. MediaPipe reports handedness as if the frame were already
+  mirrored; this covers devices that disagree.
+
 | file | what's in it |
 | --- | --- |
 | `docs/index.html` | the page shell |

@@ -16,6 +16,7 @@
 <main id="stage">
   <video id="feed" playsinline muted autoplay></video>
   <canvas id="view"></canvas>
+  <canvas id="overlay"></canvas>
 
   <header class="topbar">
     <div class="brand">PINCH<span>VISION</span></div>
@@ -23,15 +24,22 @@
       <span id="fps">— FPS</span>
       <span id="hands">0 ✋</span>
     </div>
-    <button id="morph" class="pill" aria-pressed="false">MORPH</button>
+    <div class="tools">
+      <button id="skel" class="pill" aria-pressed="true" title="hand skeleton">SKEL</button>
+      <button id="blend" class="pill" aria-pressed="false" title="blend mode">BLEND</button>
+      <button id="swap" class="pill" aria-pressed="false" title="swap hands">⇄</button>
+    </div>
   </header>
 
   <div class="dock">
-    <button class="slot" id="slot-1">
-      <span class="slot-hand">LEFT</span>
+    <button class="slot idle" id="slot-1">
+      <span class="slot-top">
+        <span class="dot"></span>
+        <span class="slot-hand">LEFT</span>
+        <span class="fx-pct">0</span>
+      </span>
       <span class="fx-name">THERMAL</span>
-      <span class="bar"><span class="bar-fill"></span></span>
-      <span class="fx-pct">0%</span>
+      <span class="meter"></span>
     </button>
 
     <div class="rec-wrap">
@@ -45,11 +53,14 @@
       <span id="rec-time"></span>
     </div>
 
-    <button class="slot" id="slot-2">
-      <span class="slot-hand">RIGHT</span>
+    <button class="slot idle" id="slot-2">
+      <span class="slot-top">
+        <span class="dot"></span>
+        <span class="slot-hand">RIGHT</span>
+        <span class="fx-pct">0</span>
+      </span>
       <span class="fx-name">NIGHT VISION</span>
-      <span class="bar"><span class="bar-fill"></span></span>
-      <span class="fx-pct">0%</span>
+      <span class="meter"></span>
     </button>
   </div>
 </main>
@@ -65,6 +76,7 @@
       <li><b>Pinch</b> index to thumb — tighter pinch, stronger effect</li>
       <li><b>Tap</b> thumb to pinky — next effect for that hand</li>
       <li><b>Record</b> up to 20s and save it to your device</li>
+      <li><b>Blend</b> one hand sweeps the rack slowly, the other fades it</li>
     </ul>
     <button id="start-btn" class="cta">Start camera</button>
     <p id="start-note" class="note">Nothing leaves your device — the camera feed

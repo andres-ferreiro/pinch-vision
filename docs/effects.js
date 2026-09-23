@@ -391,7 +391,7 @@ export class Renderer {
       gl.deleteTexture(t.tex);
       gl.deleteFramebuffer(t.fbo);
     }
-    this.pool = [0, 1, 2, 3].map(() => this.makeTarget(w, h));
+    this.pool = [0, 1, 2, 3, 4, 5].map(() => this.makeTarget(w, h));
     this.echo = [0, 1].map(() => this.makeTarget(w, h));
     this.echoPrimed = false;              // new textures, no history yet
     this.poolIndex = 0;
@@ -465,7 +465,7 @@ export class Renderer {
    * slots: [{ effect: id|'clean', amount, morph: {from, to, mix} | null }]
    * Rendered in order, each reading the previous result.
    */
-  draw(source, slots, { mirror = true, time = 0 } = {}) {
+  draw(source, slots, { mirror = true, time = 0, fade = 1 } = {}) {
     const gl = this.gl;
     // Callers normally pick the render size (it is capped per device), but fall
     // back to the source's own dimensions so a bare draw() still works.
@@ -477,25 +477,35 @@ export class Renderer {
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
 
-    let current = this.nextTarget();
-    this.pass('src', current, { uMirror: mirror ? 1 : 0 }, { uTex: this.videoTex });
+    const srcTarget = this.nextTarget();
+    this.pass('src', srcTarget, { uMirror: mirror ? 1 : 0 }, { uTex: this.videoTex });
+    let current = srcTarget;
 
     for (const slot of slots) {
       if (slot.morph) {
         const { from, to, mix } = slot.morph;
-        const a = this.applyEffect(from, current.tex, 1.0, time, [current]);
+        const a = this.applyEffect(from, current.tex, 1.0, time, [current, srcTarget]);
         const lowTex = a ? a.tex : current.tex;
         if (mix <= 0.02) { if (a) current = a; continue; }
-        const keep = a ? [current, a] : [current];
+        const keep = [current, srcTarget, a].filter(Boolean);
         const b = this.applyEffect(to, current.tex, 1.0, time, keep);
         if (!b) { if (a) current = a; continue; }
-        const out = this.nextTarget([current, a, b].filter(Boolean));
+        const out = this.nextTarget([current, srcTarget, a, b].filter(Boolean));
         this.pass('mixer', out, { uAmount: mix }, { uTex: lowTex, uTexB: b.tex });
         current = out;
       } else {
-        const out = this.applyEffect(slot.effect, current.tex, slot.amount, time, [current]);
+        const out = this.applyEffect(slot.effect, current.tex, slot.amount, time,
+          [current, srcTarget]);
         if (out) current = out;
       }
+    }
+
+    // A global fade back to the untouched camera, so one hand can dial the
+    // whole chain in and out independently of what the other is doing.
+    if (fade < 0.999 && current !== srcTarget) {
+      const out = this.nextTarget([current, srcTarget]);
+      this.pass('mixer', out, { uAmount: fade }, { uTex: srcTarget.tex, uTexB: current.tex });
+      current = out;
     }
 
     this.pass('present', null, {}, { uTex: current.tex });

@@ -38,13 +38,17 @@ html, body {
   pointer-events: none;
 }
 
-#view {
+#view, #overlay {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
-  background: #000;
 }
+
+#view { background: #000; }
+#overlay { pointer-events: none; }
 
 /* ------------------------------------------------------------------ top bar */
 
@@ -71,6 +75,11 @@ html, body {
 }
 
 .brand span { color: var(--muted); font-weight: 500; }
+
+.tools {
+  display: flex;
+  gap: 6px;
+}
 
 .stats {
   margin-left: auto;
@@ -122,66 +131,92 @@ html, body {
 .slot {
   --accent: #ff9c3c;
   display: grid;
-  gap: 6px;
+  gap: 7px;
   text-align: left;
-  padding: 11px 13px;
-  border-radius: 16px;
+  padding: 10px 12px 11px;
+  border-radius: 14px;
   border: 1px solid var(--hair);
   background: var(--panel);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
   color: var(--ink);
   font-family: var(--mono);
   cursor: pointer;
-  transition: border-color .2s, transform .12s, box-shadow .2s;
+  transition: border-color .25s, transform .12s, box-shadow .25s, opacity .25s;
   min-width: 0;
 }
 
-.slot:active { transform: scale(0.98); }
+.slot:active { transform: scale(0.985); }
+.slot.idle { opacity: 0.62; }
 
 .slot.active {
-  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent),
-              0 10px 34px rgba(0, 0, 0, 0.45);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent),
+              0 12px 36px rgba(0, 0, 0, 0.5);
 }
 
-.slot-hand {
+.slot-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 9px;
   letter-spacing: 0.18em;
   color: var(--muted);
 }
 
+/* Tracking light: dim until the hand is actually being followed. */
+.dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+  transition: background .2s, box-shadow .2s;
+  flex: none;
+}
+
+.slot.active .dot {
+  background: var(--accent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+.fx-pct {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
 .fx-name {
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   color: var(--accent);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  transition: color .25s;
 }
 
-.bar {
-  display: block;
-  height: 4px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.12);
-  overflow: hidden;
+/* Segmented meter: an instrument readout rather than a progress bar. */
+.meter {
+  display: flex;
+  gap: 2px;
+  height: 9px;
+  align-items: stretch;
 }
 
-.bar-fill {
-  display: block;
-  height: 100%;
-  width: 0%;
-  border-radius: 999px;
+.meter i {
+  flex: 1;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.10);
+  transition: background .09s linear, box-shadow .09s linear;
+}
+
+.meter i.on {
   background: var(--accent);
-  transition: width .08s linear;
-}
-
-.fx-pct {
-  font-size: 10px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 /* ------------------------------------------------------------------- record */
@@ -367,9 +402,13 @@ html, body {
 
 /* ---------------------------------------------------------------- responsive */
 
-@media (max-width: 420px) {
-  .slot { padding: 9px 10px; border-radius: 14px; }
-  .fx-name { font-size: 11px; }
+@media (max-width: 460px) {
+  .brand span { display: none; }
+  .stats { gap: 7px; font-size: 10px; }
+  .pill { padding: 6px 9px; font-size: 10px; }
+  .slot { padding: 8px 10px; gap: 6px; }
+  .fx-name { font-size: 11px; letter-spacing: 0.05em; }
+  .meter { height: 8px; }
   #record, #record svg { width: 58px; height: 58px; }
 }
 

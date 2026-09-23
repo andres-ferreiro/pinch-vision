@@ -30,6 +30,30 @@ const SMOOTHING = 0.30;      // per-frame easing on every strength value
 const MAX_RECORD_MS = 20000;
 const STATIONS = ['clean', ...EFFECTS.map((e) => e.id)];
 
+// Blend mode sweeps the rack at a hard speed limit rather than tracking the
+// pinch directly: eight effects across one pinch made every twitch a jump cut.
+const SWEEP_RATE = 0.22;      // full 0 -> 1 sweep takes about 4.5 seconds
+
+// Skeleton overlay.
+const CONNECTIONS = [
+  [0, 1], [1, 2], [2, 3], [3, 4],
+  [0, 5], [5, 6], [6, 7], [7, 8],
+  [5, 9], [9, 10], [10, 11], [11, 12],
+  [9, 13], [13, 14], [14, 15], [15, 16],
+  [13, 17], [17, 18], [18, 19], [19, 20],
+  [0, 17],
+];
+
+const store = {
+  get(key, fallback) {
+    try { const v = localStorage.getItem(`pv.${key}`); return v === null ? fallback : JSON.parse(v); }
+    catch { return fallback; }
+  },
+  set(key, value) {
+    try { localStorage.setItem(`pv.${key}`, JSON.stringify(value)); } catch { /* private mode */ }
+  },
+};
+
 const $ = (sel) => document.querySelector(sel);
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
 
@@ -42,7 +66,10 @@ const ui = {
   startNote: $('#start-note'),
   fps: $('#fps'),
   handsBadge: $('#hands'),
-  morphBtn: $('#morph'),
+  blendBtn: $('#blend'),
+  skelBtn: $('#skel'),
+  swapBtn: $('#swap'),
+  overlay: $('#overlay'),
   recordBtn: $('#record'),
   ring: $('#ring-progress'),
   recTime: $('#rec-time'),
@@ -54,9 +81,9 @@ const ui = {
   toast: $('#toast'),
   slots: [
     { root: $('#slot-1'), name: $('#slot-1 .fx-name'), pct: $('#slot-1 .fx-pct'),
-      fill: $('#slot-1 .bar-fill'), hand: $('#slot-1 .slot-hand') },
+      meter: $('#slot-1 .meter'), hand: $('#slot-1 .slot-hand'), segs: [] },
     { root: $('#slot-2'), name: $('#slot-2 .fx-name'), pct: $('#slot-2 .fx-pct'),
-      fill: $('#slot-2 .bar-fill'), hand: $('#slot-2 .slot-hand') },
+      meter: $('#slot-2 .meter'), hand: $('#slot-2 .slot-hand'), segs: [] },
   ],
 };
 
@@ -64,13 +91,17 @@ const state = {
   renderer: null,
   landmarker: null,
   running: false,
-  morph: false,
+  mode: store.get('mode', 'fixed'),          // 'fixed' | 'blend'
+  swap: store.get('swap', false),
+  skeleton: store.get('skeleton', true),
+  blendPos: 0,
+  blendFade: 0,
   fps: 0,
   lastFrame: 0,
   handsSeen: 0,
   slots: [
-    { fx: 0, amount: 0, target: 0, wasTapping: false, lastTap: 0, present: false },
-    { fx: 1, amount: 0, target: 0, wasTapping: false, lastTap: 0, present: false },
+    { fx: 0, amount: 0, target: 0, wasTapping: false, lastTap: 0, present: false, points: null },
+    { fx: 1, amount: 0, target: 0, wasTapping: false, lastTap: 0, present: false, points: null },
   ],
   recorder: null,
   recording: false,
@@ -106,7 +137,7 @@ function tapped(slot, measure, now) {
   return fired;
 }
 
-/** Morph: strength walks the chain clean -> ... -> invert, crossfading. */
+/** Rack position -> the two stations either side of it, and the crossfade. */
 function morphAt(amount) {
   const n = EFFECTS.length;
   const p = clamp01(amount) * n;
@@ -130,34 +161,74 @@ function sizeFor(video) {
   return [Math.round(vw * scale), Math.round(vh * scale)];
 }
 
-function slotDescriptor(slot) {
-  if (state.morph) {
-    const m = morphAt(slot.amount);
-    return { morph: { from: m.from, to: m.to, mix: m.mix }, amount: 1 };
+function renderPlan() {
+  if (state.mode === 'blend') {
+    const m = morphAt(state.blendPos);
+    return {
+      slots: [{ morph: { from: m.from, to: m.to, mix: m.mix }, amount: 1 }],
+      fade: state.blendFade,
+    };
   }
-  return { effect: EFFECTS[slot.fx].id, amount: slot.amount };
+  return {
+    slots: state.slots.map((slot) => ({ effect: EFFECTS[slot.fx].id, amount: slot.amount })),
+    fade: 1,
+  };
+}
+
+/** In blend mode one hand fades, the other sweeps. Which is which follows the
+ *  same swap toggle as everything else, so the cards never lie. */
+function blendRoles() {
+  return state.swap ? { fade: 1, sweep: 0 } : { fade: 0, sweep: 1 };
+}
+
+const SEGMENTS = 14;
+
+function buildMeters() {
+  for (const el of ui.slots) {
+    el.meter.innerHTML = '';
+    el.segs = [];
+    for (let i = 0; i < SEGMENTS; i++) {
+      const seg = document.createElement('i');
+      el.meter.appendChild(seg);
+      el.segs.push(seg);
+    }
+  }
 }
 
 function paintSlotUI(index) {
   const slot = state.slots[index];
   const el = ui.slots[index];
-  let meta, label, value;
-  if (state.morph) {
-    const m = morphAt(slot.amount);
-    const from = stationMeta(m.from), to = stationMeta(m.to);
-    meta = m.mix > 0.5 ? to : from;
-    label = `${from.short} › ${to.short}`;
-    value = slot.amount;
+  let meta, label, value, role;
+
+  if (state.mode === 'blend') {
+    const roles = blendRoles();
+    if (index === roles.fade) {
+      meta = CLEAN;
+      label = 'FADE';
+      value = state.blendFade;
+      role = 'depth of the whole chain';
+    } else {
+      const m = morphAt(state.blendPos);
+      const from = stationMeta(m.from), to = stationMeta(m.to);
+      meta = m.mix > 0.5 ? to : from;
+      label = `${from.short} › ${to.short}`;
+      value = state.blendPos;
+      role = 'sweep';
+    }
   } else {
     meta = EFFECTS[slot.fx];
     label = meta.name;
     value = slot.amount;
   }
+
   el.name.textContent = label;
-  el.pct.textContent = `${Math.round(value * 100)}%`;
-  el.fill.style.width = `${value * 100}%`;
+  el.pct.textContent = `${Math.round(value * 100)}`;
   el.root.style.setProperty('--accent', meta.color);
   el.root.classList.toggle('active', slot.present);
+  el.root.classList.toggle('idle', value < 0.02 && !slot.present);
+
+  const lit = Math.round(value * SEGMENTS);
+  for (let i = 0; i < SEGMENTS; i++) el.segs[i].classList.toggle('on', i < lit);
 }
 
 function loop() {
@@ -178,29 +249,49 @@ function loop() {
     // The JS API renamed this field; accept either spelling.
     const handed = result.handedness || result.handednesses || [];
     const label = handed[i]?.[0]?.categoryName;
-    // The preview is mirrored, so MediaPipe's label is the opposite of the
-    // user's real hand — flip it back.
-    const slotIndex = label === 'Left' ? 1 : 0;
+    // MediaPipe labels handedness as if the frame were already mirrored, which
+    // is exactly what the viewer sees — so "Left" is the card on the left. The
+    // swap toggle covers devices that report it the other way round.
+    let slotIndex = label === 'Left' ? 0 : 1;
+    if (state.swap) slotIndex = 1 - slotIndex;
     if (seen[slotIndex]) continue;
     seen[slotIndex] = true;
 
     const slot = state.slots[slotIndex];
+    slot.points = result.landmarks[i];
     const measure = readHand(result.landmarks[i]);
     slot.target = strengthFrom(measure.pinch);
     if (tapped(slot, measure, now)) cycleSlot(slotIndex, true);
   }
 
+  const dtSec = Math.min(0.1, (now - state.lastFrame) / 1000) || 0.016;
+
   for (let i = 0; i < 2; i++) {
     const slot = state.slots[i];
     slot.present = seen[i];
-    if (!seen[i]) { slot.target = 0; slot.wasTapping = false; }
+    if (!seen[i]) { slot.target = 0; slot.wasTapping = false; slot.points = null; }
     slot.amount += (slot.target - slot.amount) * SMOOTHING;
-    paintSlotUI(i);
   }
 
+  if (state.mode === 'blend') {
+    const roles = blendRoles();
+    state.blendFade += (state.slots[roles.fade].amount - state.blendFade) * SMOOTHING;
+    // Rate-limit the sweep so the rack drifts between effects instead of
+    // snapping the moment a finger moves a few millimetres.
+    const wanted = state.slots[roles.sweep].amount;
+    const step = Math.max(-SWEEP_RATE * dtSec,
+      Math.min(SWEEP_RATE * dtSec, wanted - state.blendPos));
+    state.blendPos = clamp01(state.blendPos + step);
+  }
+
+  paintSlotUI(0);
+  paintSlotUI(1);
+
   state.handsSeen = seen.filter(Boolean).length;
-  state.renderer.draw(video, state.slots.map(slotDescriptor),
-    { mirror: true, time: now / 1000 });
+  const plan = renderPlan();
+  state.renderer.draw(video, plan.slots,
+    { mirror: true, time: now / 1000, fade: plan.fade });
+  drawSkeleton();
 
   const dt = now - state.lastFrame;
   state.lastFrame = now;
@@ -210,21 +301,89 @@ function loop() {
   if (state.recording) tickRecording(now);
 }
 
+/**
+ * Hand skeleton, drawn on a 2D canvas stacked over the WebGL view.
+ *
+ * The view is `object-fit: cover`, so landmark coordinates (0..1 of the video)
+ * have to be mapped through the same cover transform to land on the right
+ * pixels, and mirrored on x because the picture is.
+ */
+function drawSkeleton() {
+  const canvas = ui.overlay;
+  const ctx = canvas.getContext('2d');
+  const cw = canvas.clientWidth, ch = canvas.clientHeight;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+
+  if (canvas.width !== Math.round(cw * dpr) || canvas.height !== Math.round(ch * dpr)) {
+    canvas.width = Math.round(cw * dpr);
+    canvas.height = Math.round(ch * dpr);
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cw, ch);
+  if (!state.skeleton) return;
+
+  const rw = state.renderer.width, rh = state.renderer.height;
+  if (!rw || !rh) return;
+  const scale = Math.max(cw / rw, ch / rh);          // the cover transform
+  const dw = rw * scale, dh = rh * scale;
+  const ox = (cw - dw) / 2, oy = (ch - dh) / 2;
+  const at = (lm) => [ox + (1 - lm.x) * dw, oy + lm.y * dh];
+
+  for (let i = 0; i < 2; i++) {
+    const slot = state.slots[i];
+    if (!slot.points) continue;
+    const accent = getComputedStyle(ui.slots[i].root).getPropertyValue('--accent').trim()
+      || '#ffffff';
+
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = accent;
+    ctx.globalAlpha = 0.85;
+    ctx.beginPath();
+    for (const [a, b] of CONNECTIONS) {
+      const [ax, ay] = at(slot.points[a]);
+      const [bx, by] = at(slot.points[b]);
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(bx, by);
+    }
+    ctx.stroke();
+
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#ffffff';
+    for (const lm of slot.points) {
+      const [x, y] = at(lm);
+      ctx.beginPath();
+      ctx.arc(x, y, 2.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // The pinch itself: a ring that closes as the fingers meet.
+    const [tx, ty] = at(slot.points[THUMB_TIP]);
+    const [ix, iy] = at(slot.points[INDEX_TIP]);
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc((tx + ix) / 2, (ty + iy) / 2, 6 + 16 * (1 - slot.amount), 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
 // -------------------------------------------------------------------- actions
 
 function cycleSlot(index, fromGesture) {
   const slot = state.slots[index];
-  if (state.morph) {
-    // In morph mode there is no fixed effect to advance — nudge the strength to
-    // the next station instead, and let the smoothing glide it there.
+  const hand = index === 0 ? 'LEFT' : 'RIGHT';
+  if (state.mode === 'blend') {
+    // Nothing to advance here — nudge the sweep to the next station and let the
+    // rate limiter glide it across rather than cutting.
     const n = EFFECTS.length;
-    const k = Math.round(clamp01(slot.amount) * n);
-    slot.target = ((k + 1) % (n + 1)) / n;
-    slot.amount = slot.target;      // gesture nudges are instant targets
-    toast(`${index === 0 ? 'LEFT' : 'RIGHT'} → ${stationMeta(STATIONS[(k + 1) % (n + 1)]).name}`);
+    const k = Math.round(clamp01(state.blendPos) * n);
+    const next = (k + 1) % (n + 1);
+    state.slots[blendRoles().sweep].target = next / n;
+    toast(`SWEEPING → ${stationMeta(STATIONS[next]).name}`);
   } else {
     slot.fx = (slot.fx + 1) % EFFECTS.length;
-    toast(`${index === 0 ? 'LEFT' : 'RIGHT'} → ${EFFECTS[slot.fx].name}`);
+    toast(`${hand} → ${EFFECTS[slot.fx].name}`);
   }
   if (fromGesture) navigator.vibrate?.(12);
   paintSlotUI(index);
@@ -312,11 +471,44 @@ function finishRecording() {
   }
 }
 
-function toggleMorph() {
-  state.morph = !state.morph;
-  ui.morphBtn.classList.toggle('on', state.morph);
-  ui.morphBtn.setAttribute('aria-pressed', String(state.morph));
-  toast(state.morph ? 'MORPH — pinch sweeps the whole rack' : 'FIXED — one effect per hand');
+function setPill(btn, on) {
+  btn.classList.toggle('on', on);
+  btn.setAttribute('aria-pressed', String(on));
+}
+
+function toggleBlend() {
+  state.mode = state.mode === 'blend' ? 'fixed' : 'blend';
+  store.set('mode', state.mode);
+  setPill(ui.blendBtn, state.mode === 'blend');
+  if (state.mode === 'blend') {
+    const roles = blendRoles();
+    state.blendPos = state.slots[roles.sweep].amount;
+    state.blendFade = state.slots[roles.fade].amount;
+    toast(`BLEND — ${roles.fade === 0 ? 'left' : 'right'} hand fades, other sweeps`);
+  } else {
+    toast('FIXED — one effect per hand');
+  }
+  paintSlotUI(0);
+  paintSlotUI(1);
+}
+
+function toggleSkeleton() {
+  state.skeleton = !state.skeleton;
+  store.set('skeleton', state.skeleton);
+  setPill(ui.skelBtn, state.skeleton);
+  toast(state.skeleton ? 'SKELETON ON' : 'SKELETON OFF');
+}
+
+function toggleSwap() {
+  state.swap = !state.swap;
+  store.set('swap', state.swap);
+  setPill(ui.swapBtn, state.swap);
+  // Carry each hand's settings across so the swap feels like moving the cards,
+  // not like resetting them.
+  const [a, b] = state.slots;
+  [a.fx, b.fx] = [b.fx, a.fx];
+  [a.points, b.points] = [b.points, a.points];
+  toast('HANDS SWAPPED');
   paintSlotUI(0);
   paintSlotUI(1);
 }
@@ -378,22 +570,34 @@ async function begin() {
   ui.start.hidden = true;
   state.running = true;
   state.lastFrame = performance.now();
+  setPill(ui.skelBtn, state.skeleton);
+  setPill(ui.blendBtn, state.mode === 'blend');
+  setPill(ui.swapBtn, state.swap);
   paintSlotUI(0);
   paintSlotUI(1);
   requestAnimationFrame(loop);
 }
 
 ui.startBtn.addEventListener('click', begin);
-ui.morphBtn.addEventListener('click', toggleMorph);
+ui.blendBtn.addEventListener('click', toggleBlend);
+ui.skelBtn.addEventListener('click', toggleSkeleton);
+ui.swapBtn.addEventListener('click', toggleSwap);
 ui.slots.forEach((el, i) => el.root.addEventListener('click', () => cycleSlot(i, false)));
 ui.recordBtn.addEventListener('click', () =>
   state.recording ? stopRecording() : startRecording());
 ui.again.addEventListener('click', () => { ui.result.hidden = true; });
 
+buildMeters();
+setPill(ui.skelBtn, state.skeleton);
+setPill(ui.blendBtn, state.mode === 'blend');
+setPill(ui.swapBtn, state.swap);
+
 document.addEventListener('keydown', (e) => {
   if (e.key === '1') cycleSlot(0, false);
   if (e.key === '2') cycleSlot(1, false);
-  if (e.key.toLowerCase() === 'c') toggleMorph();
+  if (e.key.toLowerCase() === 'c') toggleBlend();
+  if (e.key.toLowerCase() === 'l') toggleSkeleton();
+  if (e.key.toLowerCase() === 'h') toggleSwap();
   if (e.key.toLowerCase() === 'r') state.recording ? stopRecording() : startRecording();
 });
 
