@@ -93,12 +93,15 @@ void main() {
 
   // Auto-range against the scene average, read from the smallest mip.
   float mean = luma(textureLod(uTex, vec2(0.5), 12.0).rgb);
-  float lo = mean * 0.25;
-  heat = clamp((heat - lo) / max(0.55 - lo, 0.15), 0.0, 1.0);
-  heat += 0.30 * (luma(base) - y);            // put the sharp detail back
+  float lo = mean * 0.22;
+  // Range to 0.78 rather than 0.55: skin should land high on the ramp, not
+  // clip flat white and lose every feature in the face.
+  heat = clamp((heat - lo) / max(0.78 - lo, 0.30), 0.0, 1.0);
+  heat += 0.22 * (luma(base) - y);            // put the sharp detail back
+  heat = clamp(heat, 0.0, 1.0);
 
   vec3 hot = ironbow(heat);
-  hot += vec3(0.35, 0.22, 0.10) * smoothstep(0.80, 1.0, heat);   // bloom
+  hot += vec3(0.30, 0.18, 0.08) * smoothstep(0.88, 1.0, heat);   // bloom
   fragColor = vec4(blend(base, hot, uAmount), 1.0);
 }`;
 
@@ -138,7 +141,7 @@ void main() {
   float br = luma(texture(uTex, vUv + px * vec2( 1,  1)).rgb);
   float gx = (tr + 2.0 * mr + br) - (tl + 2.0 * ml + bl);
   float gy = (bl + 2.0 * bc + br) - (tl + 2.0 * tc + tr);
-  float mag = clamp(length(vec2(gx, gy)) * (0.9 + 1.6 * uAmount), 0.0, 1.0);
+  float mag = clamp(length(vec2(gx, gy)) * (1.4 + 2.2 * uAmount), 0.0, 1.0);
 
   vec3 neon = mix(vec3(0.0), vec3(0.04, 0.16, 0.35), smoothstep(0.0, 0.40, mag));
   neon = mix(neon, vec3(0.16, 0.71, 1.0), smoothstep(0.40, 0.75, mag));
@@ -149,8 +152,12 @@ void main() {
 // Two passes: one advances the trail state, one composites it over the frame.
 const ECHO_STATE = HEAD + `
 uniform sampler2D uState;
+uniform float uPrime;
 void main() {
   float cur = luma(textureLod(uTex, vUv, 1.0).rgb);
+  // First frame has no history. Diffing against an empty texture would mark
+  // the entire image as motion and wash the frame in trail colour, so seed it.
+  if (uPrime > 0.5) { fragColor = vec4(0.0, cur, 0.0, 1.0); return; }
   vec2 st = texture(uState, vUv).rg;           // r = trail, g = previous luma
   float motion = clamp(abs(cur - st.g) * (3.0 + 6.0 * uAmount), 0.0, 1.0);
   float decay = 0.72 + 0.26 * uAmount;
@@ -346,6 +353,7 @@ export class Renderer {
     this.echo = [];
     this.echoIndex = 0;
     this.poolIndex = 0;
+    this.echoPrimed = false;
   }
 
   makeTexture(mip) {
@@ -385,6 +393,7 @@ export class Renderer {
     }
     this.pool = [0, 1, 2, 3].map(() => this.makeTarget(w, h));
     this.echo = [0, 1].map(() => this.makeTarget(w, h));
+    this.echoPrimed = false;              // new textures, no history yet
     this.poolIndex = 0;
   }
 
@@ -430,9 +439,14 @@ export class Renderer {
   applyEffect(id, sourceTex, amount, time, keep) {
     if (id === 'clean' || amount <= 0.002) return null;
     if (id === 'echo') {
+      if (!this.echoPrimed) {
+        this.pass('echoState', this.echo[this.echoIndex], { uPrime: 1 },
+          { uTex: sourceTex, uState: this.echo[1 - this.echoIndex].tex });
+        this.echoPrimed = true;
+      }
       const prev = this.echo[this.echoIndex];
       const next = this.echo[1 - this.echoIndex];
-      this.pass('echoState', next, { uAmount: amount, uTime: time },
+      this.pass('echoState', next, { uAmount: amount, uTime: time, uPrime: 0 },
         { uTex: sourceTex, uState: prev.tex });
       this.echoIndex = 1 - this.echoIndex;
       const out = this.nextTarget(keep);
