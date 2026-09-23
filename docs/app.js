@@ -12,7 +12,7 @@
 
 import { FilesetResolver, HandLandmarker }
   from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/vision_bundle.mjs';
-import { Renderer, EFFECTS, CLEAN } from './effects.js?v=8';
+import { Renderer, EFFECTS, CLEAN } from './effects.js?v=9';
 
 const WASM = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm';
 const MODEL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker'
@@ -620,7 +620,7 @@ ui.again.addEventListener('click', () => { ui.result.hidden = true; });
 // driven from the console. See selftest.html for the shader side.
 if (location.search.includes('debug')) {
   window.__pv = { state, ui, drawSkeleton, paintSlotUI, toggleBlend, toggleSkeleton,
-                  toggleSwap, morphAt, stationMeta, Renderer };
+                  toggleSwap, morphAt, stationMeta, fitFor, sizeFor, Renderer };
 }
 
 buildMeters();
