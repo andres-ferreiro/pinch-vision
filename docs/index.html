@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#07080a">
+<meta name="description" content="Pinch your fingers to drive real-time camera effects — thermal, night vision, glitch, ascii and more, straight in the browser.">
+<title>Pinch Vision</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤏</text></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<main id="stage">
+  <video id="feed" playsinline muted autoplay></video>
+  <canvas id="view"></canvas>
+
+  <header class="topbar">
+    <div class="brand">PINCH<span>VISION</span></div>
+    <div class="stats">
+      <span id="fps">— FPS</span>
+      <span id="hands">0 ✋</span>
+    </div>
+    <button id="morph" class="pill" aria-pressed="false">MORPH</button>
+  </header>
+
+  <div class="dock">
+    <button class="slot" id="slot-1">
+      <span class="slot-hand">LEFT</span>
+      <span class="fx-name">THERMAL</span>
+      <span class="bar"><span class="bar-fill"></span></span>
+      <span class="fx-pct">0%</span>
+    </button>
+
+    <div class="rec-wrap">
+      <button id="record" aria-label="record">
+        <svg viewBox="0 0 60 60" aria-hidden="true">
+          <circle class="ring-track" cx="30" cy="30" r="26"></circle>
+          <circle id="ring-progress" class="ring-progress" cx="30" cy="30" r="26"></circle>
+        </svg>
+        <span class="rec-dot"></span>
+      </button>
+      <span id="rec-time"></span>
+    </div>
+
+    <button class="slot" id="slot-2">
+      <span class="slot-hand">RIGHT</span>
+      <span class="fx-name">NIGHT VISION</span>
+      <span class="bar"><span class="bar-fill"></span></span>
+      <span class="fx-pct">0%</span>
+    </button>
+  </div>
+</main>
+
+<div id="toast"></div>
+
+<section id="start" class="overlay">
+  <div class="card">
+    <h1>Pinch&nbsp;Vision</h1>
+    <p class="lede">Your hands are the controls. Eight real-time looks, driven
+      entirely by how you pinch.</p>
+    <ul class="how">
+      <li><b>Pinch</b> index to thumb — tighter pinch, stronger effect</li>
+      <li><b>Tap</b> thumb to pinky — next effect for that hand</li>
+      <li><b>Record</b> up to 20s and save it to your device</li>
+    </ul>
+    <button id="start-btn" class="cta">Start camera</button>
+    <p id="start-note" class="note">Nothing leaves your device — the camera feed
+      and the tracking both run locally.</p>
+  </div>
+</section>
+
+<section id="result" class="overlay" hidden>
+  <div class="card">
+    <h2>Your clip</h2>
+    <video id="result-video" controls playsinline></video>
+    <div class="row">
+      <a id="download" class="cta" download>Save</a>
+      <button id="share" class="cta ghost" hidden>Share</button>
+      <button id="again" class="cta ghost">Back</button>
+    </div>
+  </div>
+</section>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

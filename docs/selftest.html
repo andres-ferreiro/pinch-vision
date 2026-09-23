@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pinch Vision — shader self-test</title>
+<style>
+  body { background:#0b0c0e; color:#e9edf2; font:13px ui-monospace,Menlo,monospace; margin:16px; }
+  #log { white-space:pre-wrap; line-height:1.5; }
+  .ok { color:#7ee787; } .bad { color:#ff7b72; }
+  canvas { display:block; margin-top:12px; max-width:100%; border:1px solid #23262b; }
+</style>
+</head>
+<body>
+<div id="log">running…</div>
+<canvas id="sheet" width="1280" height="960"></canvas>
+<script type="module">
+import { Renderer, EFFECTS } from './effects.js';
+
+const log = document.getElementById('log');
+const lines = [];
+const say = (msg, cls = '') => {
+  lines.push(cls ? `<span class="${cls}">${msg}</span>` : msg);
+  log.innerHTML = lines.join('\n');
+};
+
+// A stand-in for the camera: skin-toned face and hand, blown-out bright wall,
+// a cold blue object — the same scene the Python contact sheet used.
+const src = document.createElement('canvas');
+src.width = 640; src.height = 360;
+{
+  const c = src.getContext('2d');
+  c.fillStyle = '#eeeeee'; c.fillRect(0, 0, 640, 360);
+  c.fillStyle = '#4b5059'; c.fillRect(0, 285, 640, 75);
+  c.fillStyle = '#3cb4e6'; c.beginPath(); c.arc(100, 110, 45, 0, 7); c.fill();
+  c.fillStyle = '#cd9e7a'; c.beginPath(); c.ellipse(280, 165, 60, 80, 0, 0, 7); c.fill();
+  c.fillStyle = '#2a2622'; c.beginPath(); c.ellipse(280, 100, 65, 45, 0, 3.14, 6.28); c.fill();
+  c.fillStyle = '#8c3c46'; c.fillRect(215, 250, 135, 60);
+  c.fillStyle = '#cd9e7a'; c.beginPath(); c.ellipse(450, 210, 35, 55, .35, 0, 7); c.fill();
+}
+
+const view = document.createElement('canvas');
+let renderer;
+try {
+  renderer = new Renderer(view);
+  say('✓ WebGL2 context + all programs compiled', 'ok');
+} catch (err) {
+  say(`✗ ${err.message}`, 'bad');
+  throw err;
+}
+
+const sheet = document.getElementById('sheet').getContext('2d');
+sheet.fillStyle = '#0b0c0e';
+sheet.fillRect(0, 0, 1280, 960);
+
+const cells = [{ label: 'SOURCE', slots: [] }];
+for (const fx of EFFECTS) cells.push({ label: fx.name, slots: [{ effect: fx.id, amount: 0.9 }] });
+cells.push({ label: 'MORPH 45%', slots: [{ morph: { from: 'edge', to: 'echo', mix: 0.45 }, amount: 1 }] });
+cells.push({ label: 'STACK thermal+ascii', slots: [
+  { effect: 'thermal', amount: 0.9 }, { effect: 'ascii', amount: 0.85 }] });
+
+const COLS = 4, CW = 320, CH = 180;
+let failures = 0;
+
+for (let i = 0; i < cells.length; i++) {
+  const { label, slots } = cells[i];
+  const t0 = performance.now();
+  try {
+    // Two passes so stateful effects (echo) have history to work with.
+    renderer.draw(src, slots, { mirror: false, time: i * 0.1 });
+    renderer.draw(src, slots, { mirror: false, time: i * 0.1 + 0.05 });
+  } catch (err) {
+    failures++;
+    say(`✗ ${label}: ${err.message}`, 'bad');
+    continue;
+  }
+  const err = renderer.gl.getError();
+  const ms = (performance.now() - t0) / 2;
+  if (err !== 0) { failures++; say(`✗ ${label}: gl error ${err}`, 'bad'); }
+  else say(`✓ ${label.padEnd(22)} ${ms.toFixed(2)} ms/frame`, 'ok');
+
+  const x = (i % COLS) * CW, y = Math.floor(i / COLS) * CH;
+  sheet.drawImage(view, x, y, CW, CH);
+  sheet.fillStyle = 'rgba(0,0,0,.6)'; sheet.fillRect(x, y, CW, 20);
+  sheet.fillStyle = '#e9edf2'; sheet.font = '12px monospace';
+  sheet.fillText(label, x + 8, y + 14);
+}
+
+say(failures ? `\n${failures} FAILURE(S)` : '\nALL PASS', failures ? 'bad' : 'ok');
+window.__selftest = { failures, done: true };
+</script>
+</body>
+</html>

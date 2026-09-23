@@ -1,0 +1,5 @@
+# mediapipe 1.x ships a macOS build whose hand-landmarker graph aborts in a plain
+# Python process ("DrishtiMetalHelper ... Service is unavailable"), so pin 0.10.x.
+mediapipe==0.10.35
+opencv-python>=4.9
+numpy>=1.26

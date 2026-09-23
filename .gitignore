@@ -1,0 +1,5 @@
+.venv/
+models/*.task
+__pycache__/
+*.pyc
+.DS_Store
