@@ -14,7 +14,9 @@
 <div id="log">running…</div>
 <canvas id="sheet" width="1280" height="960"></canvas>
 <script type="module">
-import { Renderer, EFFECTS } from './effects.js';
+// Cache-bust so a test run always exercises the deployed file, not a
+// copy the browser held on to from a previous version.
+const { Renderer, EFFECTS } = await import(`./effects.js?t=${Date.now()}`);
 
 const log = document.getElementById('log');
 const lines = [];
