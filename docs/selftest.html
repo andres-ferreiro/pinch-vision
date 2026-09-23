@@ -48,6 +48,8 @@ try {
   throw err;
 }
 
+renderer.setSize(src.width, src.height);
+
 const sheet = document.getElementById('sheet').getContext('2d');
 sheet.fillStyle = '#0b0c0e';
 sheet.fillRect(0, 0, 1280, 960);

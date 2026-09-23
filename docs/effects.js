@@ -345,6 +345,7 @@ export class Renderer {
     this.pool = [];
     this.echo = [];
     this.echoIndex = 0;
+    this.poolIndex = 0;
   }
 
   makeTexture(mip) {
@@ -452,6 +453,12 @@ export class Renderer {
    */
   draw(source, slots, { mirror = true, time = 0 } = {}) {
     const gl = this.gl;
+    // Callers normally pick the render size (it is capped per device), but fall
+    // back to the source's own dimensions so a bare draw() still works.
+    if (!this.pool.length) {
+      this.setSize(source.videoWidth || source.width || 1280,
+                   source.videoHeight || source.height || 720);
+    }
     gl.bindTexture(gl.TEXTURE_2D, this.videoTex);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
