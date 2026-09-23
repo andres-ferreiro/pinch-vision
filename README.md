@@ -1,5 +1,8 @@
 # pinch vision
 
+**Live in the browser → https://andres-ferreiro.github.io/pinch-vision/**
+(works on a phone; camera stays on your device)
+
 Webcam toy: MediaPipe tracks both hands, and **each hand is a knob**. Pinch thumb
 and index together to grab your knob, then twist your hand to dial an effect in
 or out. Left hand drives knob 1, right hand knob 2; each knob can be pointed at
@@ -129,7 +132,51 @@ Colours are 24-bit escapes taken from each effect's HUD accent, so the terminal
 and the window agree on what THERMAL looks like. They turn themselves off when
 stdout is not a TTY or `NO_COLOR` is set; `--quiet` silences the whole thing.
 
+## Web build (`docs/`)
+
+The browser version is the same instrument with a simpler control scheme: it is
+**pinch-only** — how closed your pinch is *is* the effect strength, no grabbing
+or twisting — plus the thumb-to-pinky tap to change effect, and clip recording.
+
+| file | what's in it |
+| --- | --- |
+| `docs/index.html` | the page shell |
+| `docs/app.js` | camera, MediaPipe, gesture maths, UI, recording |
+| `docs/effects.js` | WebGL2 renderer: all eight effects as fragment shaders |
+| `docs/style.css` | mobile-first dark UI |
+| `docs/selftest.html` | renders every shader against a synthetic frame and reports timings — open it after changing a shader |
+
+The gesture logic is a direct port (same normalisation, same hysteresis, same
+cooldown). The effects are not: numpy per-pixel work does not exist in the
+browser at speed, so each one is a fragment shader. Notable differences:
+
+* **Echo trails keeps its state in a ping-pong framebuffer pair**, because a
+  shader cannot read and write one texture in a single pass. The state texture
+  packs the trail in `r` and the previous frame's luma in `g`, which removes a
+  whole copy pass, and it is seeded on first use — diffing against an empty
+  texture marks every pixel as motion and washes the frame.
+* **Scene averages come from mipmaps.** Thermal's auto-range and night vision's
+  auto-exposure need a mean brightness; sampling the 1x1 mip with `textureLod`
+  gives it for free, with no readback stall.
+* **The ASCII glyph atlas is drawn once to a 2D canvas** and uploaded as a
+  texture, so a frame is one texture sample per pixel rather than thousands of
+  draw calls.
+
+Recording uses `canvas.captureStream()` into `MediaRecorder`, capped at 20s
+(`MAX_RECORD_MS` in `app.js`). It prefers `video/mp4` where supported — Safari
+and iOS — and falls back to WebM, then offers Save plus the native share sheet.
+
+### Deploying
+
+GitHub Pages serves this repo from `main` → `/docs`, which is why the folder is
+named that. For Vercel, import the repo and set **Root Directory** to `docs`
+with no build command. Any static host works; the only requirement is **HTTPS**,
+since browsers refuse camera access otherwise (localhost is exempt, so
+`python3 -m http.server --directory docs` is fine for local work).
+
 ## Layout
+
+Desktop app:
 
 | file | what's in it |
 | --- | --- |

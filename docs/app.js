@@ -323,6 +323,25 @@ function toggleMorph() {
 
 // ----------------------------------------------------------------- lifecycle
 
+/**
+ * Load the tracker immediately, not on tap. It is ~8 MB of model plus WASM and
+ * takes several seconds cold; starting now means it downloads while the intro
+ * is being read, so "Start camera" feels instant on a warm connection.
+ */
+async function loadTracker() {
+  const fileset = await FilesetResolver.forVisionTasks(WASM);
+  return HandLandmarker.createFromOptions(fileset, {
+    baseOptions: { modelAssetPath: MODEL, delegate: 'GPU' },
+    runningMode: 'VIDEO',
+    numHands: 2,
+    minHandDetectionConfidence: 0.6,
+    minHandPresenceConfidence: 0.5,
+    minTrackingConfidence: 0.5,
+  });
+}
+
+const trackerPromise = loadTracker().catch((err) => err);
+
 async function begin() {
   ui.startBtn.disabled = true;
   ui.startNote.textContent = 'requesting camera…';
@@ -339,22 +358,14 @@ async function begin() {
     return;
   }
 
-  ui.startNote.textContent = 'loading hand tracker…';
-  try {
-    const fileset = await FilesetResolver.forVisionTasks(WASM);
-    state.landmarker = await HandLandmarker.createFromOptions(fileset, {
-      baseOptions: { modelAssetPath: MODEL, delegate: 'GPU' },
-      runningMode: 'VIDEO',
-      numHands: 2,
-      minHandDetectionConfidence: 0.6,
-      minHandPresenceConfidence: 0.5,
-      minTrackingConfidence: 0.5,
-    });
-  } catch (err) {
-    ui.startNote.textContent = `tracker failed to load: ${err.message}`;
+  ui.startNote.textContent = 'starting hand tracker…';
+  const tracker = await trackerPromise;
+  if (tracker instanceof Error) {
+    ui.startNote.textContent = `tracker failed to load: ${tracker.message}`;
     ui.startBtn.disabled = false;
     return;
   }
+  state.landmarker = tracker;
 
   try {
     state.renderer = new Renderer(ui.canvas);
