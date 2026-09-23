@@ -12,7 +12,7 @@
 
 import { FilesetResolver, HandLandmarker }
   from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/vision_bundle.mjs';
-import { Renderer, EFFECTS, CLEAN } from './effects.js';
+import { Renderer, EFFECTS, CLEAN } from './effects.js?v=8';
 
 const WASM = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm';
 const MODEL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker'
