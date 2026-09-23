@@ -87,6 +87,7 @@ html, body {
 .stats {
   margin-left: auto;
   display: flex;
+  align-items: center;
   gap: 10px;
   font-family: var(--mono);
   font-size: 11px;
@@ -94,7 +95,48 @@ html, body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Fixed width so the frame rate cannot shuffle the layout as it changes. */
+#fps {
+  min-width: 46px;
+  text-align: right;
+  color: var(--ink);
+}
+
+#fps b { font-weight: 400; color: var(--muted); margin-left: 3px; }
+
+/* Two lamps instead of an emoji: one per hand, lit in that hand's effect. */
+.hands { display: flex; gap: 3px; }
+
+.hands i {
+  width: 12px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.16);
+  transition: background .2s, box-shadow .2s;
+}
+
+.hands i.lit { box-shadow: 0 0 8px currentColor; }
+
+#mask-badge {
+  padding: 2px 7px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: var(--ink);
+  letter-spacing: 0.16em;
+  font-size: 9px;
+}
+
+#mask-badge[hidden] { display: none; }
+
+#mask-badge.charging {
+  color: #07080a;
+  background: var(--ink);
+  border-color: var(--ink);
+  font-weight: 700;
+}
+
 .pill {
+  min-width: 40px;
   font-family: var(--mono);
   font-size: 11px;
   letter-spacing: 0.1em;
@@ -109,11 +151,40 @@ html, body {
   transition: color .18s, border-color .18s, background .18s;
 }
 
+.pill.danger { color: #ff8a8a; border-color: rgba(255, 90, 90, 0.35); }
+.pill[hidden] { display: none; }
+
 .pill.on {
   color: #07080a;
   background: var(--ink);
   border-color: var(--ink);
   font-weight: 700;
+}
+
+/* A quiet line that always says what the hands can do next. */
+#hint {
+  position: absolute;
+  left: 50%;
+  bottom: 124px;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 0 14px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  color: rgba(233, 237, 242, 0.55);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.85);
+  text-align: center;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity .35s;
+  pointer-events: none;
+}
+
+#hint.show { opacity: 1; }
+
+@media (max-width: 460px) {
+  #hint { font-size: 8.5px; letter-spacing: 0.1em; bottom: 118px; }
 }
 
 /* --------------------------------------------------------------------- dock */
@@ -310,75 +381,246 @@ html, body {
 
 .overlay[hidden] { display: none; }
 
-.card {
-  width: min(430px, 100%);
-  max-height: 100%;
-  overflow: auto;
-  padding: 26px 24px;
-  border-radius: 22px;
-  border: 1px solid var(--hair);
-  background: linear-gradient(180deg, rgba(24, 26, 31, 0.92), rgba(12, 13, 16, 0.92));
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+@media (max-width: 460px) {
+  .overlay { padding: 14px; }
+  /* Two micro-labels do not fit a phone header without wrapping; the build
+     stamp is the expendable one. */
+  #start .eyebrow.dim { display: none; }
+  .panel { padding: 16px 16px 18px; }
+  .how { font-size: 12px; }
+  .how li { grid-template-columns: 62px 1fr; gap: 8px; }
 }
 
-.card h1 { margin: 0 0 8px; font-size: 27px; letter-spacing: -0.02em; }
-.card h2 { margin: 0 0 14px; font-size: 19px; }
+/* The overlays are the same instrument as the dock: hairline panels, mono
+   micro-labels, colour that only ever comes from the effect palette. */
 
-.lede { margin: 0 0 18px; color: var(--muted); line-height: 1.5; font-size: 14px; }
+.panel {
+  position: relative;
+  width: min(440px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  padding: 18px 20px 20px;
+  border-radius: 18px;
+  border: 1px solid var(--hair);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 120px),
+    linear-gradient(180deg, rgba(22, 24, 29, 0.96), rgba(10, 11, 14, 0.96));
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.65);
+}
+
+/* A hairline of light along the top edge, like a lit bezel. */
+.panel::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 18px;
+  right: 18px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.28), transparent);
+}
+
+.panel-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 14px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--hair);
+}
+
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  color: var(--ink);
+}
+
+.eyebrow { white-space: nowrap; }
+.eyebrow.dim { margin-left: auto; color: var(--muted); }
+
+.led {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ff4d4d;
+  box-shadow: 0 0 8px rgba(255, 77, 77, 0.8);
+}
+
+.title {
+  margin: 0 0 10px;
+  font-family: var(--mono);
+  font-size: clamp(20px, 6vw, 26px);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  line-height: 1;
+}
+
+.title span { color: var(--muted); font-weight: 500; }
+
+.lede {
+  margin: 0 0 16px;
+  color: var(--muted);
+  line-height: 1.55;
+  font-size: 13.5px;
+}
+
+/* The rack, as the colour key for everything the dock will show later. */
+.rack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 18px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.chip i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--chip);
+  box-shadow: 0 0 7px var(--chip);
+}
 
 .how {
   list-style: none;
-  margin: 0 0 22px;
+  margin: 0 0 20px;
   padding: 0;
   display: grid;
-  gap: 9px;
-  font-size: 13px;
+  gap: 10px;
+  font-size: 12.5px;
   color: var(--muted);
   font-family: var(--mono);
   line-height: 1.45;
 }
 
-.how b { color: var(--ink); font-weight: 700; }
+.how li {
+  display: grid;
+  grid-template-columns: 66px 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+/* Key caps, coloured from the effect palette so the vocabulary stays one set. */
+.key {
+  display: grid;
+  place-items: center;
+  padding: 4px 0 5px;
+  border: 1px solid color-mix(in srgb, var(--key) 45%, transparent);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--key) 12%, transparent);
+  color: var(--key);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.k-pinch { --key: #ff9c3c; }
+.k-tap   { --key: #ff6edc; }
+.k-rec   { --key: #ff5a5a; }
+.k-blend { --key: #3cbeff; }
+.k-window { --key: #d8ffc8; }
+.k-pin { --key: #ff9c3c; }
+.k-clear { --key: #ff5a5a; }
 
 .cta {
   display: inline-grid;
   place-items: center;
   width: 100%;
-  padding: 14px 18px;
-  border: 0;
-  border-radius: 14px;
+  padding: 13px 18px;
+  border: 1px solid transparent;
+  border-radius: 12px;
   background: var(--ink);
   color: #07080a;
-  font-size: 15px;
+  font-family: var(--mono);
+  font-size: 12px;
   font-weight: 700;
-  font-family: var(--sans);
+  letter-spacing: 0.14em;
   text-decoration: none;
   cursor: pointer;
+  transition: opacity .18s, background .18s, border-color .18s, transform .12s;
 }
 
-.cta:disabled { opacity: .55; }
+.cta:active { transform: scale(0.99); }
+
+/* `hidden` loses to an explicit display value, so say it again here — without
+   this the Share button still takes a grid cell when it is unsupported. */
+.cta[hidden] { display: none; }
+.cta:disabled { opacity: .5; }
 
 .cta.ghost {
   background: transparent;
   color: var(--ink);
-  border: 1px solid var(--hair);
+  border-color: var(--hair);
 }
 
-.row { display: flex; gap: 10px; margin-top: 14px; }
+.cta.ghost:hover { border-color: rgba(255, 255, 255, 0.26); }
+
+.row {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1fr;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.row:has(#share[hidden]) { grid-template-columns: 1.3fr 1fr; }
 
 .note {
   margin: 14px 0 0;
-  font-size: 12px;
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.6;
   color: var(--muted);
-  line-height: 1.45;
+  letter-spacing: 0.04em;
   text-align: center;
 }
 
 #result-video {
   width: 100%;
-  border-radius: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--hair);
   background: #000;
-  max-height: 46vh;
+  max-height: 44vh;
+  display: block;
+}
+
+.clip-fx {
+  margin-top: 10px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+  text-align: center;
+}
+
+#probe {
+  position: fixed;
+  left: 50%;
+  bottom: 4px;
+  transform: translateX(-50%);
+  font-family: var(--mono);
+  font-size: 10px;
+  color: #8be9fd;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 3px 8px;
+  border-radius: 6px;
+  z-index: 30;
+  pointer-events: none;
+  white-space: nowrap;
 }
 
 /* -------------------------------------------------------------------- toast */
@@ -408,7 +650,25 @@ html, body {
 @media (max-width: 460px) {
   .brand span { display: none; }
   .stats { gap: 7px; font-size: 10px; }
-  .pill { padding: 6px 9px; font-size: 10px; }
+  #mask-badge {
+  padding: 2px 7px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: var(--ink);
+  letter-spacing: 0.16em;
+  font-size: 9px;
+}
+
+#mask-badge[hidden] { display: none; }
+
+#mask-badge.charging {
+  color: #07080a;
+  background: var(--ink);
+  border-color: var(--ink);
+  font-weight: 700;
+}
+
+.pill { padding: 6px 9px; font-size: 10px; }
   .slot { padding: 8px 10px; gap: 6px; }
   .fx-name { font-size: 11px; letter-spacing: 0.05em; }
   .meter { height: 8px; }

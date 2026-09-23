@@ -148,6 +148,76 @@ Three toggles sit in the top bar, and all three persist in `localStorage`:
   camera. The sweep is rate-limited to `SWEEP_RATE` (0.22/s, so a full pass
   takes ~4.5s) because mapping eight effects straight onto one pinch turned
   every twitch into a jump cut.
+* **WINDOW** (a gesture, not a button) — touch your two index fingertips and
+  your two thumb tips together and a window **opens**. Spread your hands and the
+  masked region opens out with them: it is the convex hull of those same four
+  fingertips, so the quad tracks your hands wherever they go.
+
+  **It only opens.** Closing used to be the same gesture, and that was the flaw:
+  while shaping a window your hands pass near each other constantly, and any of
+  those passes read as a second edge and shut it off by itself. Dismissing is
+  the twist, which cannot happen by accident.
+
+  The two gaps are **averaged** rather than both having to pass — lining up four
+  fingertips at once is fussy, and one pair landing squarely should carry the
+  other being a little wide. `handOpen()` is deliberately generous too, since a
+  hand tilted toward the camera foreshortens; it only has to rule out a curled
+  hand, not certify a flat one.
+
+  While the window is up, thumb and index are busy holding the frame, so
+  **strength moves to the middle finger**: extended is full, curled into the
+  palm is off. The cards read `WIN`.
+
+* **Thumb to the back fingers** does two jobs, told apart by *how long you
+  hold it* rather than by which fingertip you touch:
+
+  * **touch and release** — that hand steps to the next effect
+  * **touch and hold one second** — the window pins into the scene, with the
+    effects it had, and your hands are free for the next one (up to
+    `MAX_PINNED`, 4)
+
+  While you hold, a ring fills at the contact point on your hand and the top bar
+  counts up `PINNING 60%`.
+
+  **Duration, not finger identity, is what separates them.** Ring and pinky
+  travel together — curling the pinky to meet the thumb drags the ring along, and
+  in a 2D projection either can read as nearer — so asking the tracker which one
+  the thumb is on is a coin toss, and it stopped the effect tap from working at
+  all. `min(thumb→ring, thumb→pinky)` gets used instead, and the clock decides.
+
+  There is **no upper limit on a tap**: any release that did not reach a pin
+  counts as one. An earlier 600 ms cutoff left a dead zone where holding a shade
+  too long did nothing, which feels identical to the gesture being broken.
+
+  Verified: quick tap with and without a window → effect steps, no pin; an
+  awkward 800 ms hold → effect steps, no pin; a full hold → pins and leaves the
+  effect alone, including on release; three taps in a row → three effects.
+
+* **Turn both palms away from the camera and hold a second** to dismiss. It is
+  context sensitive: if you are holding a live window it drops that one and
+  leaves your pinned ones alone; if you are not, it wipes every pinned window. The badge counts up
+  `CLEARING 60%` while you hold.
+
+  Orientation is the one property of a hand that no other gesture here uses, so
+  it cannot collide with anything. It is read as the sign of the
+  wrist→index-knuckle × wrist→pinky-knuckle cross product, which flips when a
+  hand turns over.
+
+  **Nothing assumes which sign means "palm forward"** — that depends on which
+  hand it is and whether the image is mirrored. Each hand's usual orientation is
+  learned at runtime and a *departure* from it is the gesture, so it
+  self-calibrates. Edge-on hands report no opinion (`PALM_EPS`) rather than a
+  coin-flip sign, and the gesture re-arms only once the hands come back, so
+  turning over and back is one clear rather than two.
+
+  Verified: three seconds of palms-toward-camera clears nothing; 600 ms turned
+  away charges to 59% without firing; 1100 ms clears everything; a 400 ms flip
+  clears nothing.
+
+  A `CLEAR n` pill in the top bar does the same by hand — tap removes the most
+  recent window, press and hold removes them all.
+
+  `?debug=1` shows both thumb distances and the live hold time per hand.
 * **⇄** — swap which hand drives which card, carrying each hand's chosen effect
   across with it. MediaPipe reports handedness as if the frame were already
   mirrored; this covers devices that disagree.
@@ -179,6 +249,24 @@ browser at speed, so each one is a fragment shader. Notable differences:
 Recording uses `canvas.captureStream()` into `MediaRecorder`, capped at 20s
 (`MAX_RECORD_MS` in `app.js`). It prefers `video/mp4` where supported — Safari
 and iOS — and falls back to WebM, then offers Save plus the native share sheet.
+
+### Installing it as an app
+
+`docs/manifest.webmanifest` plus `docs/sw.js` make it installable — Add to Home
+Screen on iOS, Install on Android/Chrome — where it runs full screen with no
+browser chrome, which is worth a lot when the whole interface is your hands.
+
+The service worker splits its caching by what the file *is*:
+
+* the app's own files are **network-first**, so a deploy is never masked by a
+  stale cache (the module imports also carry a `?v=` you bump on release)
+* the CDN payload — MediaPipe's WASM and the ~8 MB landmark model — is
+  **cache-first**, because it is immutable and version-pinned. After one visit
+  the tracker starts warm, which is the difference between a six second wait and
+  an instant one on a phone.
+
+Icons are generated at `docs/icon-*.png` (192, 512, and a 512 maskable with the
+safe-zone padding Android needs), plus a 180px `apple-touch-icon.png`.
 
 ### Deploying
 

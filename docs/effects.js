@@ -55,6 +55,45 @@ void main() {
 const PRESENT = HEAD + `
 void main() { fragColor = vec4(texture(uTex, vUv).rgb, 1.0); }`;
 
+// Final composite. Without a window it is a plain crossfade; with one, the
+// effect chain is clipped to the quad the two pinches make, and the boundary
+// gets a hairline so the window reads as a real object held in the hands.
+const MASK_MIX = HEAD + `
+uniform sampler2D uTexB;
+uniform vec2 uPoly[8];
+uniform int uCount;
+uniform float uMask;
+
+// Signed distance to a directed edge: positive on its left, so a
+// counter-clockwise polygon is positive everywhere inside it.
+float edgeDist(vec2 p, vec2 a, vec2 b) {
+  vec2 e = b - a;
+  return (e.x * (p.y - a.y) - e.y * (p.x - a.x)) / max(length(e), 1e-5);
+}
+
+void main() {
+  vec3 clean = texture(uTex, vUv).rgb;
+  vec3 styled = texture(uTexB, vUv).rgb;
+
+  // Work in pixels, or the feather would stretch with the aspect ratio.
+  vec2 p = vUv * uRes;
+  float d = 1e9;
+  for (int i = 0; i < 8; i++) {
+    if (i >= uCount) break;
+    int j = i + 1;
+    if (j >= uCount) j = 0;
+    d = min(d, edgeDist(p, uPoly[i] * uRes, uPoly[j] * uRes));
+  }
+
+  float inside = smoothstep(-1.5, 1.5, d);
+  float keep = mix(1.0, inside, uMask);        // uMask 0 -> the whole frame
+  vec3 col = mix(clean, styled, clamp(uAmount, 0.0, 1.0) * keep);
+
+  float line = (1.0 - smoothstep(0.0, 2.0, abs(d))) * uMask;
+  col = mix(col, vec3(1.0), line * 0.8);
+  fragColor = vec4(col, 1.0);
+}`;
+
 const MIXER = HEAD + `
 uniform sampler2D uTexB;
 void main() {
@@ -265,7 +304,7 @@ void main() {
 }`;
 
 const SHADERS = {
-  src: SRC, present: PRESENT, mixer: MIXER,
+  src: SRC, present: PRESENT, mixer: MIXER, maskMix: MASK_MIX,
   thermal: THERMAL, night: NIGHT, edge: EDGE, glitch: GLITCH,
   ascii: ASCII, halftone: HALFTONE, invert: INVERT,
   echoState: ECHO_STATE, echoComp: ECHO_COMP,
@@ -391,7 +430,7 @@ export class Renderer {
       gl.deleteTexture(t.tex);
       gl.deleteFramebuffer(t.fbo);
     }
-    this.pool = [0, 1, 2, 3, 4, 5].map(() => this.makeTarget(w, h));
+    this.pool = [0, 1, 2, 3, 4, 5, 6, 7].map(() => this.makeTarget(w, h));
     this.echo = [0, 1].map(() => this.makeTarget(w, h));
     this.echoPrimed = false;              // new textures, no history yet
     this.poolIndex = 0;
@@ -425,7 +464,13 @@ export class Renderer {
     }
     gl.uniform2f(gl.getUniformLocation(p, 'uRes'), this.width, this.height);
     for (const [uname, value] of Object.entries(uniforms)) {
-      gl.uniform1f(gl.getUniformLocation(p, uname), value);
+      const loc = gl.getUniformLocation(p, uname);
+      // A Float32Array is a vec2[] (the mask polygon); a name ending in Count is
+      // an int; everything else is a plain float.
+      if (value instanceof Float32Array) gl.uniform2fv(loc, value);
+      else if (Array.isArray(value)) gl.uniform2f(loc, value[0], value[1]);
+      else if (uname.endsWith('Count')) gl.uniform1i(loc, value);
+      else gl.uniform1f(loc, value);
     }
     gl.drawArrays(gl.TRIANGLES, 0, 3);
 
@@ -462,10 +507,53 @@ export class Renderer {
   }
 
   /**
+   * Run a list of slots over `from`, returning the last target written (or
+   * `from` itself when nothing was applied). `hold` lists targets the pool must
+   * not recycle while this runs.
+   */
+  chain(from, slots, time, hold = []) {
+    let current = from;
+    for (const slot of slots) {
+      const keep = [...hold, current];
+      if (slot.morph) {
+        const { from: lo, to: hi, mix } = slot.morph;
+        const a = this.applyEffect(lo, current.tex, 1.0, time, keep);
+        const lowTex = a ? a.tex : current.tex;
+        if (mix <= 0.02) { if (a) current = a; continue; }
+        const b = this.applyEffect(hi, current.tex, 1.0, time, [...keep, a].filter(Boolean));
+        if (!b) { if (a) current = a; continue; }
+        const out = this.nextTarget([...keep, a, b].filter(Boolean));
+        this.pass('mixer', out, { uAmount: mix }, { uTex: lowTex, uTexB: b.tex });
+        current = out;
+      } else {
+        const out = this.applyEffect(slot.effect, current.tex, slot.amount, time, keep);
+        if (out) current = out;
+      }
+    }
+    return current;
+  }
+
+  /** Flatten a polygon into the vec2[8] the mask shader expects. */
+  static packPoly(poly) {
+    const flat = new Float32Array(16);
+    for (let i = 0; i < Math.min(poly.length, 8); i++) {
+      flat[i * 2] = poly[i][0];
+      flat[i * 2 + 1] = poly[i][1];
+    }
+    return flat;
+  }
+
+  /**
    * slots: [{ effect: id|'clean', amount, morph: {from, to, mix} | null }]
    * Rendered in order, each reading the previous result.
+   *
+   * `pinned` is a list of { poly, slots } windows stamped into the scene, each
+   * carrying the effects it was pinned with; `mask` is the live one. Every
+   * region runs its own chain from the clean source and is then composited over
+   * the running result inside its own polygon.
    */
-  draw(source, slots, { mirror = true, time = 0, fade = 1 } = {}) {
+  draw(source, slots, { mirror = true, time = 0, fade = 1, mask = null,
+                        pinned = [] } = {}) {
     const gl = this.gl;
     // Callers normally pick the render size (it is capped per device), but fall
     // back to the source's own dimensions so a bare draw() still works.
@@ -479,35 +567,45 @@ export class Renderer {
 
     const srcTarget = this.nextTarget();
     this.pass('src', srcTarget, { uMirror: mirror ? 1 : 0 }, { uTex: this.videoTex });
-    let current = srcTarget;
 
-    for (const slot of slots) {
-      if (slot.morph) {
-        const { from, to, mix } = slot.morph;
-        const a = this.applyEffect(from, current.tex, 1.0, time, [current, srcTarget]);
-        const lowTex = a ? a.tex : current.tex;
-        if (mix <= 0.02) { if (a) current = a; continue; }
-        const keep = [current, srcTarget, a].filter(Boolean);
-        const b = this.applyEffect(to, current.tex, 1.0, time, keep);
-        if (!b) { if (a) current = a; continue; }
-        const out = this.nextTarget([current, srcTarget, a, b].filter(Boolean));
-        this.pass('mixer', out, { uAmount: mix }, { uTex: lowTex, uTexB: b.tex });
-        current = out;
+    const regions = pinned
+      .filter((w) => w.poly && w.poly.length >= 3)
+      .map((w) => ({ poly: w.poly, slots: w.slots, strength: 1 }));
+    if (mask && mask.strength > 0.002 && mask.points && mask.points.length >= 3) {
+      regions.push({ poly: mask.points, slots, strength: mask.strength });
+    }
+
+    // Nothing is windowed: the chain simply covers the whole frame.
+    if (!regions.length) {
+      const current = this.chain(srcTarget, slots, time, [srcTarget]);
+      if (fade < 0.999 && current !== srcTarget) {
+        this.pass('maskMix', null, {
+          uAmount: fade, uMask: 0,
+          uPoly: Renderer.packPoly([[0, 0], [1, 0], [1, 1], [0, 1]]), uCount: 4,
+        }, { uTex: srcTarget.tex, uTexB: current.tex });
       } else {
-        const out = this.applyEffect(slot.effect, current.tex, slot.amount, time,
-          [current, srcTarget]);
-        if (out) current = out;
+        this.pass('present', null, {}, { uTex: current.tex });
       }
+      return;
     }
 
-    // A global fade back to the untouched camera, so one hand can dial the
-    // whole chain in and out independently of what the other is doing.
-    if (fade < 0.999 && current !== srcTarget) {
-      const out = this.nextTarget([current, srcTarget]);
-      this.pass('mixer', out, { uAmount: fade }, { uTex: srcTarget.tex, uTexB: current.tex });
-      current = out;
+    let base = srcTarget;
+    let drawn = false;
+    for (let i = 0; i < regions.length; i++) {
+      const region = regions[i];
+      const styled = this.chain(srcTarget, region.slots, time, [srcTarget, base]);
+      if (styled === srcTarget) continue;          // that window has no effect up
+      const last = i === regions.length - 1;
+      const target = last ? null : this.nextTarget([srcTarget, base, styled]);
+      this.pass('maskMix', target, {
+        uAmount: fade,
+        uMask: region.strength,
+        uPoly: Renderer.packPoly(region.poly),
+        uCount: Math.min(region.poly.length, 8),
+      }, { uTex: base.tex, uTexB: styled.tex });
+      if (!last) base = target;
+      drawn = true;
     }
-
-    this.pass('present', null, {}, { uTex: current.tex });
+    if (!drawn) this.pass('present', null, {}, { uTex: base.tex });
   }
 }

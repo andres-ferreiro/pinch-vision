@@ -6,7 +6,13 @@
 <meta name="theme-color" content="#07080a">
 <meta name="description" content="Pinch your fingers to drive real-time camera effects — thermal, night vision, glitch, ascii and more, straight in the browser.">
 <title>Pinch Vision</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤏</text></svg>">
+<link rel="icon" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Pinch">
+<meta name="mobile-web-app-capable" content="yes">
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <link rel="preconnect" href="https://storage.googleapis.com" crossorigin>
 <link rel="stylesheet" href="style.css">
@@ -21,15 +27,21 @@
   <header class="topbar">
     <div class="brand">PINCH<span>VISION</span></div>
     <div class="stats">
-      <span id="fps">— FPS</span>
-      <span id="hands">0 ✋</span>
+      <span id="fps">—<b>fps</b></span>
+      <span class="hands" aria-label="hands tracked">
+        <i id="hand-l"></i><i id="hand-r"></i>
+      </span>
+      <span id="mask-badge" hidden>WINDOW</span>
     </div>
     <div class="tools">
       <button id="skel" class="pill" aria-pressed="true" title="hand skeleton">SKEL</button>
       <button id="blend" class="pill" aria-pressed="false" title="blend mode">BLEND</button>
       <button id="swap" class="pill" aria-pressed="false" title="swap hands">⇄</button>
+      <button id="clear" class="pill danger" hidden title="tap: remove last · hold: remove all">CLEAR 0</button>
     </div>
   </header>
+
+  <p id="hint"></p>
 
   <div class="dock">
     <button class="slot idle" id="slot-1">
@@ -68,36 +80,61 @@
 <div id="toast"></div>
 
 <section id="start" class="overlay">
-  <div class="card">
-    <h1>Pinch&nbsp;Vision</h1>
+  <div class="panel">
+    <div class="panel-top">
+      <span class="eyebrow">GESTURE-CONTROLLED OPTICS</span>
+      <span class="eyebrow dim">WEBGL · MEDIAPIPE</span>
+    </div>
+
+    <h1 class="title">PINCH<span>VISION</span></h1>
     <p class="lede">Your hands are the controls. Eight real-time looks, driven
       entirely by how you pinch.</p>
+
+    <div class="rack" id="rack-strip" aria-label="effect rack"></div>
+
     <ul class="how">
-      <li><b>Pinch</b> index to thumb — tighter pinch, stronger effect</li>
-      <li><b>Tap</b> thumb to pinky — next effect for that hand</li>
-      <li><b>Record</b> up to 20s and save it to your device</li>
-      <li><b>Blend</b> one hand sweeps the rack slowly, the other fades it</li>
+      <li><span class="key k-pinch">PINCH</span>
+        <span>index to thumb — tighter pinch, stronger effect</span></li>
+      <li><span class="key k-tap">TAP</span>
+        <span>thumb to pinky — next effect for that hand</span></li>
+      <li><span class="key k-rec">REC</span>
+        <span>up to 20s, saved straight to your device</span></li>
+      <li><span class="key k-blend">BLEND</span>
+        <span>one hand sweeps the rack, the other fades it</span></li>
+      <li><span class="key k-window">WINDOW</span>
+        <span>touch both hands' fingertips — opens a window</span></li>
+      <li><span class="key k-pin">PIN</span>
+        <span>hold thumb to ring finger 1s — the window stays put</span></li>
+      <li><span class="key k-clear">CLEAR</span>
+        <span>turn both palms away 1s — dismiss, or wipe them all</span></li>
     </ul>
-    <button id="start-btn" class="cta">Start camera</button>
+
+    <button id="start-btn" class="cta">START CAMERA</button>
     <p id="start-note" class="note">Nothing leaves your device — the camera feed
       and the tracking both run locally.</p>
   </div>
 </section>
 
 <section id="result" class="overlay" hidden>
-  <div class="card">
-    <h2>Your clip</h2>
+  <div class="panel">
+    <div class="panel-top">
+      <span class="eyebrow"><i class="led"></i> CLIP READY</span>
+      <span class="eyebrow dim" id="clip-meta">—</span>
+    </div>
+
     <video id="result-video" controls playsinline></video>
+    <div class="clip-fx" id="clip-fx">—</div>
+
     <div class="row">
-      <a id="download" class="cta" download>Save</a>
-      <button id="share" class="cta ghost" hidden>Share</button>
-      <button id="again" class="cta ghost">Back</button>
+      <a id="download" class="cta" download>SAVE</a>
+      <button id="share" class="cta ghost" hidden>SHARE</button>
+      <button id="again" class="cta ghost">BACK</button>
     </div>
   </div>
 </section>
 
 <!-- Bump ?v= on every deploy: Pages caches for 10 minutes, and a new
      index.html paired with a stale app.js is a real failure mode. -->
-<script type="module" src="app.js?v=9"></script>
+<script type="module" src="app.js?v=10"></script>
 </body>
 </html>
