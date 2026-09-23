@@ -587,6 +587,14 @@ ui.recordBtn.addEventListener('click', () =>
   state.recording ? stopRecording() : startRecording());
 ui.again.addEventListener('click', () => { ui.result.hidden = true; });
 
+// With ?debug in the URL, expose the internals so the pieces that need a real
+// camera to exercise (skeleton mapping, card states, blend roles) can still be
+// driven from the console. See selftest.html for the shader side.
+if (location.search.includes('debug')) {
+  window.__pv = { state, ui, drawSkeleton, paintSlotUI, toggleBlend, toggleSkeleton,
+                  toggleSwap, morphAt, stationMeta, Renderer };
+}
+
 buildMeters();
 setPill(ui.skelBtn, state.skeleton);
 setPill(ui.blendBtn, state.mode === 'blend');
