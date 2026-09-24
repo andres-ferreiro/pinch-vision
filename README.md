@@ -501,6 +501,14 @@ muting silences playback and persists across a reload.
 
 ## Landscape
 
+**iPhone Safari cannot do this at all.** It has no element Fullscreen API —
+only `<video>` can go fullscreen there, via `webkitEnterFullscreen` — so
+`requestFullscreen` does not exist to call and no amount of code will remove the
+URL bar from a normal Safari tab. Installing to the home screen runs the app
+without browser chrome, which is the same result by another route, so the app
+says so once in landscape and then never again. Everywhere that *does* support
+it:
+
 A phone on its side goes fullscreen. A rotation is not a user gesture, so
 `requestFullscreen` from the orientation change is usually refused — when it is,
 the request is *armed* and the next touch spends it, which costs nothing because
@@ -514,6 +522,18 @@ The layout follows: below 540px of height in landscape the start screen uses the
 same two-column split as the desktop one with everything wound in, and the top
 bar, dock, record button, strip and photo viewer all give back the height that
 landscape does not have to spare.
+
+The camera is **re-shaped on rotation**. The stream is asked for in the shape of
+the screen, but that shape used to be chosen once, when it opened: start in
+portrait, rotate to landscape, and a 720x1280 stream was left on an 852x393
+screen, where `fitFor()` computes `0.26` against its `0.74` threshold and can
+only pillarbox it into a sliver with most of the display black. `applyConstraints`
+is tried first and a fresh stream opened if the camera ignores it, which plenty
+do for a swap of their own sensor orientation.
+
+A notch sits on one of the short edges in landscape, so `safe-area-inset-left`
+and `-right` stop being zero there. Everything pinned to an edge now clears
+them — the rail was being clipped by exactly this.
 
 Verified at 844x390: the start screen fits with no scrolling at all, the dock
 takes 126px of 390 with a photo strip in it, and nothing overflows

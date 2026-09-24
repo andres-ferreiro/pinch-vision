@@ -8,12 +8,12 @@
  * six second wait and an instant one on a phone.
  */
 
-const VERSION = 'pv-2026-09-23n';
+const VERSION = 'pv-2026-09-23o';
 const SHELL = [
   './',
   './index.html',
-  './style.css?v=7',
-  './app.js?v=23',
+  './style.css?v=8',
+  './app.js?v=24',
   './effects.js?v=11',
   './manifest.webmanifest',
   './icon-192.png',

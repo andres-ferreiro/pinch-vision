@@ -28,6 +28,8 @@
 
   --safe-t: env(safe-area-inset-top, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
 }
 
 * { box-sizing: border-box; }
@@ -1140,7 +1142,28 @@ button, a { font-family: inherit; }
    start screen's list would be most of a page of scrolling. Same two-column
    idea as the desktop layout, everything wound in. */
 @media (orientation: landscape) and (max-height: 540px) {
-  .overlay { place-items: center; padding: 14px 20px; }
+  /* A notch sits on one of the short edges in landscape, so the side insets
+     stop being zero here and everything pinned to an edge has to clear them.
+     The rail was being clipped by exactly this. */
+  .overlay {
+    place-items: center;
+    padding: 14px calc(var(--safe-r) + 20px) 14px calc(var(--safe-l) + 20px);
+  }
+
+  .topbar {
+    padding-left: calc(var(--safe-l) + 16px);
+    padding-right: calc(var(--safe-r) + 16px);
+  }
+
+  .dock {
+    padding-left: calc(var(--safe-l) + 16px);
+    padding-right: calc(var(--safe-r) + 16px);
+  }
+
+  .viewer {
+    padding-left: calc(var(--safe-l) + 18px);
+    padding-right: calc(var(--safe-r) + 18px);
+  }
 
   .panel {
     width: min(920px, 100%);
@@ -1184,7 +1207,7 @@ button, a { font-family: inherit; }
   /* Centred, the rail would run 105->285 into a dock that starts at 264.
      Anchored under the top bar instead it sits 52->232, clear of both. */
   .rail {
-    left: 8px;
+    left: calc(var(--safe-l) + 8px);
     top: calc(var(--safe-t) + 46px);
     transform: none;
     gap: 5px;

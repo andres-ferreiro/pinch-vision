@@ -2244,6 +2244,67 @@ addEventListener('pointerdown', () => sfx.unlock(), { once: true, capture: true 
  * there the installed PWA is the route, which is what `display_override:
  * ["fullscreen"]` in the manifest is for.
  */
+let reshaping = false;
+
+/**
+ * Re-shape the camera stream when the phone turns.
+ *
+ * The stream is asked for in the shape of the screen, but that shape is chosen
+ * once, when it opens. Rotate afterwards and a portrait stream is left on a
+ * landscape screen, where `fitFor()` can only pillarbox it into a sliver — most
+ * of the display going black for no reason.
+ */
+async function reshapeCamera() {
+  const stream = ui.video.srcObject;
+  if (!stream || reshaping) return;
+  const track = stream.getVideoTracks?.()[0];
+  if (!track) return;
+
+  const portrait = matchMedia('(orientation: portrait)').matches;
+  const wide = ui.video.videoWidth > ui.video.videoHeight;
+  if (wide === !portrait) return;                 // already the right way round
+
+  reshaping = true;
+  const shape = {
+    width: { ideal: portrait ? 720 : 1280 },
+    height: { ideal: portrait ? 1280 : 720 },
+  };
+  try {
+    await track.applyConstraints(shape);
+    await new Promise((done) => setTimeout(done, 300));
+    if ((ui.video.videoWidth > ui.video.videoHeight) !== !portrait) {
+      // applyConstraints is advisory, and plenty of cameras ignore a swap of
+      // their own sensor orientation. Opening a fresh stream is the only way
+      // that reliably changes it. The permission is already granted, so this
+      // costs a flicker rather than another prompt.
+      const next = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', ...shape },
+        audio: false,
+      });
+      for (const t of stream.getTracks()) t.stop();
+      ui.video.srcObject = next;
+      await ui.video.play();
+    }
+  } catch { /* whatever we already have is what we keep */ }
+  reshaping = false;
+}
+
+/**
+ * iPhone Safari has no element fullscreen — only `<video>` can go fullscreen
+ * there — so there is nothing to call and no point pretending. Installing to
+ * the home screen runs the app without browser chrome, which is the same thing
+ * by another route, so say so once and never again.
+ */
+function noteFullscreenLimit() {
+  if (!wantsFullscreen() || document.documentElement.requestFullscreen) return;
+  const installed = navigator.standalone === true
+    || matchMedia('(display-mode: standalone)').matches
+    || matchMedia('(display-mode: fullscreen)').matches;
+  if (installed || store.get('fsHinted', false)) return;
+  store.set('fsHinted', true);
+  toast('ADD TO HOME SCREEN FOR FULLSCREEN');
+}
+
 const landscapeQuery = matchMedia('(orientation: landscape)');
 const coarseQuery = matchMedia('(pointer: coarse)');
 let armedFullscreen = false;
@@ -2262,8 +2323,10 @@ function enterFullscreen() {
 }
 
 function syncFullscreen() {
+  reshapeCamera();
   if (wantsFullscreen()) {
     enterFullscreen();
+    noteFullscreenLimit();
     return;
   }
   armedFullscreen = false;
