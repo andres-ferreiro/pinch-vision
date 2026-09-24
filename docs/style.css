@@ -1,14 +1,32 @@
-/* Pinch Vision — mobile-first, dark, out of the way of the picture. */
+/* Pinch Vision — mobile-first, dark, out of the way of the picture.
+ *
+ * Two rules hold the look together:
+ *
+ *   1. Glass is a budget, not a texture. Exactly three surfaces are frosted —
+ *      the tool segment, the dock bar and the overlay scrim. Everything else
+ *      sits directly on the picture or on the scrim.
+ *   2. Grouping comes from alignment and hairline rules, never from boxes.
+ *      Nothing in here is a card.
+ *
+ * Type is split by intent: Space Grotesk for anything read as language,
+ * JetBrains Mono for anything read as a measurement.
+ */
 
 :root {
   --bg: #07080a;
-  --ink: #e9edf2;
-  --muted: #8b949e;
-  --panel: rgba(18, 20, 24, 0.62);
-  --hair: rgba(255, 255, 255, 0.10);
+  --ink: #eceff3;
+  --dim: #9aa2ad;
+  --faint: rgba(236, 239, 243, 0.46);
+  --hair: rgba(255, 255, 255, 0.08);
+  --hair-2: rgba(255, 255, 255, 0.16);
+  --glass: rgba(11, 12, 16, 0.52);
   --accent: #ff9c3c;
-  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+  --danger: #ff6b6b;
+
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --display: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  --safe-t: env(safe-area-inset-top, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px);
 }
 
@@ -19,15 +37,19 @@ html, body {
   height: 100%;
   background: var(--bg);
   color: var(--ink);
-  font-family: var(--sans);
+  font-family: var(--display);
   overscroll-behavior: none;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
+
+button, a { font-family: inherit; }
 
 #stage {
   position: fixed;
   inset: 0;
   overflow: hidden;
+  background: #05060a;
 }
 
 #feed {
@@ -38,7 +60,7 @@ html, body {
   pointer-events: none;
 }
 
-#view, #overlay {
+#view, #paint, #overlay {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -47,14 +69,145 @@ html, body {
   display: block;
 }
 
-#view { background: #000; }
+/* The drawing sits above the picture and below the skeleton. It is screen
+   space, not render space — `object-fit` would shift the strokes off the
+   picture, so it always fills the stage exactly. */
+#paint {
+  object-fit: fill;
+  pointer-events: none;
+}
 
-/* Letterboxing shows the whole frame; the bars should read as part of the UI. */
-#stage { background: #05060a; }
+#view { background: #000; }
 #overlay { pointer-events: none; }
+
+/* -------------------------------------------------------------------- rail */
+
+/* One capsule, same idea as the top bar's segment: a cluster of controls gets
+   one frosted surface, never one each. It sits clear of the top bar and the
+   dock so a hand reaching for it is not also over a readout. */
+/* Brightens as a hand comes for it. Nothing else on screen says the rail can
+   be pointed at, so the rail has to say it itself. */
+.rail.near {
+  border-color: var(--hair-2);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.10), 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+.rail {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  gap: 9px;
+  justify-items: center;
+  padding: 10px 9px;
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  background: var(--glass);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  transition: border-color .25s, box-shadow .25s;
+  z-index: 4;
+}
+
+.air {
+  --charge: 0;
+  position: relative;
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--hair);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ink);
+  cursor: pointer;
+  transition: background .18s, color .18s;
+}
+
+.air-label {
+  font-family: var(--mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.air.on {
+  background: var(--ink);
+  color: #07080a;
+}
+
+/* Dwell progress. A conic gradient at 0deg draws nothing, so the ring simply
+   is not there until a fingertip starts holding. */
+.air::after,
+.hue::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: conic-gradient(var(--accent, #ff9c3c) calc(var(--charge) * 360deg),
+                             transparent 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+          mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+}
+
+/* Brush and colour are only meaningful once the pen is out, so they are not on
+   the rail until then — which also keeps it short enough to clear the dock on a
+   landscape phone. */
+.draw-only { display: none; }
+#stage.drawing .draw-only { display: grid; }
+
+.hue {
+  --charge: 0;
+  --pos: 0.12;
+  --picked: #ff9c3c;
+  position: relative;
+  width: 34px;
+  height: 112px;
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  cursor: pointer;
+  touch-action: none;
+  background: linear-gradient(to bottom,
+    hsl(0 95% 62%), hsl(60 95% 62%), hsl(120 95% 62%), hsl(180 95% 62%),
+    hsl(240 95% 62%), hsl(300 95% 62%), hsl(360 95% 62%));
+}
+
+/* A pill, not a circle, so the conic ring mask does not crop its corners. */
+.hue::after {
+  -webkit-mask: none;
+          mask: none;
+  background: none;
+  box-shadow: 0 0 0 calc(var(--charge) * 3px) rgba(255, 255, 255, 0.85);
+  border-radius: 999px;
+}
+
+.hue-thumb {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--pos) * 100%);
+  width: 26px;
+  height: 26px;
+  margin: -13px 0 0 -13px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: var(--picked);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+
+/* While drawing, a hairline of the pen colour around the frame. It rides on the
+   overlay canvas: #stage's ::before would paint behind the canvases, and its
+   ::after already carries the recording border. */
+#stage.drawing #overlay {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--ink-accent, #ff9c3c) 55%, transparent);
+}
 
 /* ------------------------------------------------------------------ top bar */
 
+/* A scrim only — no blur up here, so the top of the frame stays sharp. */
 .topbar {
   position: absolute;
   top: 0;
@@ -62,118 +215,160 @@ html, body {
   right: 0;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: calc(env(safe-area-inset-top, 0px) + 12px) 14px 12px;
-  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.55), transparent);
+  gap: 12px;
+  padding: calc(var(--safe-t) + 14px) 16px 18px;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.62), transparent);
   pointer-events: none;
 }
 
 .topbar > * { pointer-events: auto; }
 
 .brand {
-  font-family: var(--mono);
-  font-size: 13px;
-  letter-spacing: 0.14em;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
 }
 
-.brand span { color: var(--muted); font-weight: 500; }
-
-.tools {
-  display: flex;
-  gap: 6px;
-}
+.brand span { color: var(--faint); font-weight: 400; }
 
 .stats {
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   font-family: var(--mono);
-  font-size: 11px;
-  color: var(--muted);
+  font-size: 10px;
+  color: var(--dim);
   font-variant-numeric: tabular-nums;
 }
 
 /* Fixed width so the frame rate cannot shuffle the layout as it changes. */
 #fps {
-  min-width: 46px;
+  min-width: 44px;
   text-align: right;
   color: var(--ink);
+  letter-spacing: -0.02em;
 }
 
-#fps b { font-weight: 400; color: var(--muted); margin-left: 3px; }
+#fps b { font-weight: 400; color: var(--faint); margin-left: 3px; }
 
 /* Two lamps instead of an emoji: one per hand, lit in that hand's effect. */
 .hands { display: flex; gap: 3px; }
 
 .hands i {
-  width: 12px;
-  height: 4px;
+  width: 13px;
+  height: 3px;
   border-radius: 2px;
-  background: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.18);
   transition: background .2s, box-shadow .2s;
 }
 
-.hands i.lit { box-shadow: 0 0 8px currentColor; }
+.hands i.lit { box-shadow: 0 0 9px currentColor; }
 
+/* Lifted out of the stats row and centred under the top bar. Its text swings
+   from "WINDOW" to "CLEARING 100%", which no fixed flex row survives — and
+   charge feedback belongs in the middle of the frame anyway, where the eyes
+   already are while the gesture is being held. */
 #mask-badge {
-  padding: 2px 7px;
-  border-radius: 5px;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  color: var(--ink);
-  letter-spacing: 0.16em;
+  position: absolute;
+  top: calc(var(--safe-t) + 56px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
   font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  white-space: nowrap;
+  color: var(--ink);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9);
+  font-variant-numeric: tabular-nums;
+}
+
+#mask-badge::before {
+  content: "";
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
 }
 
 #mask-badge[hidden] { display: none; }
+#mask-badge.charging { color: var(--accent); }
 
-#mask-badge.charging {
-  color: #07080a;
-  background: var(--ink);
-  border-color: var(--ink);
-  font-weight: 700;
-}
+/* ------------------------------------------------------------------- tools */
 
-.pill {
-  min-width: 40px;
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.1em;
-  color: var(--muted);
-  background: var(--panel);
+.tools { display: flex; align-items: center; gap: 4px; }
+
+/* One frosted capsule for all the toggles, divided by hairlines — instead of
+   three separate blurred pills each announcing themselves. */
+.segment {
+  display: flex;
+  align-items: stretch;
   border: 1px solid var(--hair);
   border-radius: 999px;
-  padding: 7px 13px;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  cursor: pointer;
-  transition: color .18s, border-color .18s, background .18s;
+  background: var(--glass);
+  backdrop-filter: blur(16px) saturate(1.2);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  overflow: hidden;
 }
 
-.pill.danger { color: #ff8a8a; border-color: rgba(255, 90, 90, 0.35); }
-.pill[hidden] { display: none; }
+.segment button {
+  border: 0;
+  background: transparent;
+  padding: 8px 13px;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.005em;
+  color: var(--faint);
+  cursor: pointer;
+  transition: color .18s, background .18s;
+}
 
-.pill.on {
-  color: #07080a;
+.segment button + button { box-shadow: inset 1px 0 0 var(--hair); }
+.segment button:hover { color: var(--ink); }
+.segment button.glyph { font-size: 14px; padding: 8px 11px; }
+
+.segment button.on {
   background: var(--ink);
-  border-color: var(--ink);
+  color: #07080a;
   font-weight: 700;
 }
+
+/* A count, so it reads in mono like the rest of the instrumentation. */
+#clear {
+  border: 0;
+  background: transparent;
+  padding: 8px 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  white-space: nowrap;
+  color: var(--danger);
+  cursor: pointer;
+  flex: none;
+}
+
+#clear[hidden] { display: none; }
 
 /* A quiet line that always says what the hands can do next. */
 #hint {
   position: absolute;
   left: 50%;
-  bottom: 124px;
+  bottom: 118px;
   transform: translateX(-50%);
   margin: 0;
-  padding: 0 14px;
+  padding: 0 16px;
   font-family: var(--mono);
   font-size: 9.5px;
-  letter-spacing: 0.16em;
-  color: rgba(233, 237, 242, 0.55);
-  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.85);
+  letter-spacing: 0.15em;
+  color: rgba(236, 239, 243, 0.62);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9);
   text-align: center;
   white-space: nowrap;
   opacity: 0;
@@ -182,60 +377,60 @@ html, body {
 }
 
 #hint.show { opacity: 1; }
-
-@media (max-width: 460px) {
-  #hint { font-size: 8.5px; letter-spacing: 0.1em; bottom: 118px; }
-}
+/* The dock grows by the strip's height, so the hint moves with it. */
+#stage.has-shots #hint { bottom: 186px; }
 
 /* --------------------------------------------------------------------- dock */
 
+/* The one frosted plate in the running app. The readouts inside it are bare
+   type on glass — they need no surfaces of their own. */
 .dock {
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
   display: grid;
+  gap: 12px;
+  padding: 14px 18px calc(var(--safe-b) + 14px);
+  border-top: 1px solid var(--hair);
+  background: linear-gradient(to top, rgba(5, 6, 9, 0.8), rgba(5, 6, 9, 0.42));
+  backdrop-filter: blur(22px) saturate(1.15);
+  -webkit-backdrop-filter: blur(22px) saturate(1.15);
+}
+
+.dock-row {
+  display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: end;
-  gap: 10px;
-  padding: 18px 12px calc(var(--safe-b) + 16px);
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.62), transparent);
+  gap: 16px;
 }
 
 .slot {
   --accent: #ff9c3c;
   display: grid;
   gap: 7px;
+  padding: 0;
+  border: 0;
+  background: none;
   text-align: left;
-  padding: 10px 12px 11px;
-  border-radius: 14px;
-  border: 1px solid var(--hair);
-  background: var(--panel);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
   color: var(--ink);
-  font-family: var(--mono);
   cursor: pointer;
-  transition: border-color .25s, transform .12s, box-shadow .25s, opacity .25s;
   min-width: 0;
+  transition: opacity .25s;
 }
 
-.slot:active { transform: scale(0.985); }
-.slot.idle { opacity: 0.62; }
+.slot.idle { opacity: 0.42; }
+.slot:active { opacity: 0.75; }
 
-.slot.active {
-  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent),
-              0 12px 36px rgba(0, 0, 0, 0.5);
-}
-
-.slot-top {
+.slot-head {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 9px;
-  letter-spacing: 0.18em;
-  color: var(--muted);
+  gap: 7px;
+  font-family: var(--mono);
+  font-size: 8.5px;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  color: var(--faint);
 }
 
 /* Tracking light: dim until the hand is actually being followed. */
@@ -250,47 +445,124 @@ html, body {
 
 .slot.active .dot {
   background: var(--accent);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 70%, transparent);
+  box-shadow: 0 0 9px color-mix(in srgb, var(--accent) 80%, transparent);
 }
 
-.fx-pct {
-  margin-left: auto;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
+.slot-main {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
 }
 
 .fx-name {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
   color: var(--accent);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  transition: color .25s;
+  transition: color .25s, text-shadow .25s;
+}
+
+.slot.active .fx-name {
+  text-shadow: 0 0 22px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.fx-pct {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Segmented meter: an instrument readout rather than a progress bar. */
 .meter {
   display: flex;
   gap: 2px;
-  height: 9px;
+  height: 3px;
   align-items: stretch;
 }
 
 .meter i {
   flex: 1;
   border-radius: 1px;
-  background: rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.13);
   transition: background .09s linear, box-shadow .09s linear;
 }
 
 .meter i.on {
   background: var(--accent);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: 0 0 7px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+/* The right-hand readout mirrors the left, so the record button reads as the
+   axis of the dock rather than as one more item in a row. */
+#slot-2 { text-align: right; }
+#slot-2 .slot-head,
+#slot-2 .slot-main { flex-direction: row-reverse; }
+
+/* -------------------------------------------------------------------- strip */
+
+/* The film strip. Thumbnails carry the frame's own aspect ratio, which is what
+   lets the captured photo scale into place uniformly instead of squashing. */
+.strip {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  height: 52px;
+  padding-bottom: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.strip[hidden] { display: none; }
+.strip::-webkit-scrollbar { display: none; }
+
+.shot {
+  flex: none;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background-color: #000;
+  background-position: center;
+  background-repeat: no-repeat;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px var(--hair-2), 0 6px 18px rgba(0, 0, 0, 0.45);
+  transition: transform .16s, box-shadow .16s;
+}
+
+.shot:hover { transform: translateY(-2px); box-shadow: 0 0 0 1px var(--ink), 0 8px 22px rgba(0, 0, 0, 0.55); }
+.shot:active { transform: translateY(0) scale(0.97); }
+
+/* The photo in flight, from full frame down into its slot. Transform-only, so
+   it never lays out and never touches the compositor's slow path. */
+.flyer {
+  position: fixed;
+  margin: 0;
+  z-index: 24;
+  border-radius: 7px;
+  pointer-events: none;
+  transform-origin: center center;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.5), 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+
+.flash {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* ------------------------------------------------------------------- record */
@@ -298,14 +570,13 @@ html, body {
 .rec-wrap {
   display: grid;
   justify-items: center;
-  gap: 4px;
-  padding-bottom: 2px;
+  gap: 5px;
 }
 
 #record {
   position: relative;
-  width: 64px;
-  height: 64px;
+  width: 62px;
+  height: 62px;
   border: 0;
   padding: 0;
   border-radius: 50%;
@@ -313,18 +584,18 @@ html, body {
   cursor: pointer;
 }
 
-#record svg { width: 64px; height: 64px; transform: rotate(-90deg); }
+#record svg { width: 62px; height: 62px; transform: rotate(-90deg); display: block; }
 
 .ring-track {
-  fill: rgba(10, 11, 13, 0.55);
-  stroke: rgba(255, 255, 255, 0.22);
-  stroke-width: 3;
+  fill: rgba(255, 255, 255, 0.05);
+  stroke: var(--hair-2);
+  stroke-width: 2;
 }
 
 .ring-progress {
   fill: none;
   stroke: #ff4d4d;
-  stroke-width: 3;
+  stroke-width: 2.5;
   stroke-linecap: round;
   stroke-dasharray: 163.4;
   stroke-dashoffset: 163.4;
@@ -343,15 +614,16 @@ html, body {
 }
 
 #record.recording .rec-dot {
-  width: 20px;
-  height: 20px;
-  margin: -10px 0 0 -10px;
-  border-radius: 5px;
+  width: 19px;
+  height: 19px;
+  margin: -9.5px 0 0 -9.5px;
+  border-radius: 4px;
 }
 
 #rec-time {
   font-family: var(--mono);
   font-size: 10px;
+  font-weight: 500;
   color: #ff8a8a;
   height: 12px;
   font-variant-numeric: tabular-nums;
@@ -362,194 +634,212 @@ html, body {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  box-shadow: inset 0 0 0 2px rgba(255, 77, 77, 0.55);
+  box-shadow: inset 0 0 0 2px rgba(255, 77, 77, 0.5);
 }
 
 /* ----------------------------------------------------------------- overlays */
 
+/* The scrim is the surface. The content sits straight on it — no panel, no
+   border, no shadow — and is grouped by labelled hairline rules instead. */
 .overlay {
   position: fixed;
   inset: 0;
   display: grid;
-  place-items: center;
-  padding: 20px;
-  background: rgba(4, 5, 7, 0.88);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  place-items: start center;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: calc(var(--safe-t) + 34px) 22px calc(var(--safe-b) + 34px);
+  background: rgba(5, 6, 9, 0.9);
+  backdrop-filter: blur(26px) saturate(1.1);
+  -webkit-backdrop-filter: blur(26px) saturate(1.1);
   z-index: 10;
 }
 
 .overlay[hidden] { display: none; }
 
-@media (max-width: 460px) {
-  .overlay { padding: 14px; }
-  /* Two micro-labels do not fit a phone header without wrapping; the build
-     stamp is the expendable one. */
-  #start .eyebrow.dim { display: none; }
-  .panel { padding: 16px 16px 18px; }
-  .how { font-size: 12px; }
-  .how li { grid-template-columns: 62px 1fr; gap: 8px; }
-}
-
-/* The overlays are the same instrument as the dock: hairline panels, mono
-   micro-labels, colour that only ever comes from the effect palette. */
-
 .panel {
   position: relative;
-  width: min(440px, 100%);
-  max-height: 100%;
-  overflow: auto;
-  padding: 18px 20px 20px;
-  border-radius: 18px;
-  border: 1px solid var(--hair);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 120px),
-    linear-gradient(180deg, rgba(22, 24, 29, 0.96), rgba(10, 11, 14, 0.96));
-  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.65);
+  width: min(430px, 100%);
+  margin: auto 0;
 }
 
-/* A hairline of light along the top edge, like a lit bezel. */
+/* One soft bloom in the effect colour, to keep a borderless column from
+   reading as flat. */
 .panel::before {
   content: "";
   position: absolute;
-  top: 0;
-  left: 18px;
-  right: 18px;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.28), transparent);
+  top: -120px;
+  left: -60px;
+  width: 300px;
+  height: 260px;
+  background: radial-gradient(closest-side, rgba(255, 156, 60, 0.16), transparent);
+  pointer-events: none;
 }
+
+.panel > * { position: relative; }
 
 .panel-top {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding-bottom: 14px;
-  margin-bottom: 16px;
+  gap: 12px;
+  padding-bottom: 16px;
   border-bottom: 1px solid var(--hair);
 }
 
 .eyebrow {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   font-family: var(--mono);
   font-size: 9px;
-  letter-spacing: 0.18em;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
   color: var(--ink);
+  white-space: nowrap;
 }
 
-.eyebrow { white-space: nowrap; }
-.eyebrow.dim { margin-left: auto; color: var(--muted); }
+.eyebrow.dim { margin-left: auto; color: var(--faint); }
 
 .led {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: #ff4d4d;
-  box-shadow: 0 0 8px rgba(255, 77, 77, 0.8);
+  box-shadow: 0 0 9px rgba(255, 77, 77, 0.9);
 }
 
+/* The wordmark is the one loud thing on the page: solid weight over an
+   outlined one, so it reads as a lens stack rather than a heading. */
 .title {
-  margin: 0 0 10px;
-  font-family: var(--mono);
-  font-size: clamp(20px, 6vw, 26px);
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  line-height: 1;
+  margin: 24px 0 14px;
+  font-size: clamp(40px, 13vw, 58px);
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 0.9;
 }
 
-.title span { color: var(--muted); font-weight: 500; }
+.title span {
+  display: block;
+  color: transparent;
+  -webkit-text-stroke: 1px rgba(236, 239, 243, 0.42);
+}
 
 .lede {
-  margin: 0 0 16px;
-  color: var(--muted);
+  margin: 0 0 26px;
+  max-width: 34ch;
+  color: var(--dim);
   line-height: 1.55;
-  font-size: 13.5px;
+  font-size: 15px;
 }
 
-/* The rack, as the colour key for everything the dock will show later. */
-.rack {
+.block { margin-bottom: 24px; }
+
+/* Label plus a rule that runs to the edge: grouping without a container. */
+.label {
   display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  margin-bottom: 18px;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  font-family: var(--mono);
+  font-size: 8.5px;
+  font-weight: 500;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+.label::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--hair);
+}
+
+/* The rack, as the colour key for everything the dock will show later. Each
+   entry is a spectrum line, not a chip. */
+.rack {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 10px 16px;
 }
 
 .chip {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 8px;
-  border: 1px solid var(--hair);
-  border-radius: 999px;
+  gap: 9px;
   font-family: var(--mono);
   font-size: 9px;
-  letter-spacing: 0.1em;
-  color: var(--muted);
+  font-weight: 500;
+  letter-spacing: 0.13em;
+  color: var(--dim);
+  white-space: nowrap;
 }
 
 .chip i {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
+  flex: none;
+  width: 15px;
+  height: 2px;
+  border-radius: 1px;
   background: var(--chip);
-  box-shadow: 0 0 7px var(--chip);
+  box-shadow: 0 0 9px var(--chip);
 }
 
 .how {
   list-style: none;
-  margin: 0 0 20px;
+  margin: 0;
   padding: 0;
-  display: grid;
-  gap: 10px;
-  font-size: 12.5px;
-  color: var(--muted);
-  font-family: var(--mono);
-  line-height: 1.45;
 }
 
 .how li {
   display: grid;
-  grid-template-columns: 66px 1fr;
-  gap: 10px;
-  align-items: start;
+  grid-template-columns: 64px 1fr;
+  gap: 14px;
+  align-items: baseline;
+  padding: 8px 0;
+  border-top: 1px solid var(--hair);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--dim);
 }
 
-/* Key caps, coloured from the effect palette so the vocabulary stays one set. */
+.how li:first-child { border-top: 0; padding-top: 0; }
+
+/* Coloured from the effect palette so the vocabulary stays one set — the
+   colour alone does the work the keycap outline used to. */
 .key {
-  display: grid;
-  place-items: center;
-  padding: 4px 0 5px;
-  border: 1px solid color-mix(in srgb, var(--key) 45%, transparent);
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--key) 12%, transparent);
-  color: var(--key);
+  font-family: var(--mono);
   font-size: 9px;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--key);
 }
 
-.k-pinch { --key: #ff9c3c; }
-.k-tap   { --key: #ff6edc; }
-.k-rec   { --key: #ff5a5a; }
-.k-blend { --key: #3cbeff; }
+.k-pinch  { --key: #ff9c3c; }
+.k-tap    { --key: #ff6edc; }
+.k-rec    { --key: #ff5a5a; }
+.k-blend  { --key: #3cbeff; }
 .k-window { --key: #d8ffc8; }
-.k-pin { --key: #ff9c3c; }
-.k-clear { --key: #ff5a5a; }
+.k-pin    { --key: #ff9c3c; }
+.k-lock   { --key: #3cbeff; }
+.k-draw   { --key: #ff6edc; }
+.k-photo  { --key: #e6e6e6; }
+.k-reset  { --key: #ff5a5a; }
 
 .cta {
   display: inline-grid;
   place-items: center;
   width: 100%;
-  padding: 13px 18px;
+  padding: 15px 20px;
   border: 1px solid transparent;
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--ink);
   color: #07080a;
-  font-family: var(--mono);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
   text-decoration: none;
   cursor: pointer;
   transition: opacity .18s, background .18s, border-color .18s, transform .12s;
@@ -565,45 +855,45 @@ html, body {
 .cta.ghost {
   background: transparent;
   color: var(--ink);
-  border-color: var(--hair);
+  border-color: var(--hair-2);
 }
 
-.cta.ghost:hover { border-color: rgba(255, 255, 255, 0.26); }
+.cta.ghost:hover { border-color: rgba(255, 255, 255, 0.34); }
 
 .row {
   display: grid;
   grid-template-columns: 1.3fr 1fr 1fr;
   gap: 8px;
-  margin-top: 14px;
+  margin-top: 18px;
 }
 
 .row:has(#share[hidden]) { grid-template-columns: 1.3fr 1fr; }
 
 .note {
-  margin: 14px 0 0;
-  font-family: var(--mono);
-  font-size: 10px;
+  margin: 16px 0 0;
+  font-size: 12px;
   line-height: 1.6;
-  color: var(--muted);
-  letter-spacing: 0.04em;
+  color: var(--faint);
   text-align: center;
 }
 
 #result-video {
   width: 100%;
-  border-radius: 12px;
-  border: 1px solid var(--hair);
+  margin-top: 20px;
+  border-radius: 10px;
   background: #000;
-  max-height: 44vh;
+  max-height: 46vh;
   display: block;
 }
 
 .clip-fx {
-  margin-top: 10px;
+  margin-top: 12px;
   font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  color: var(--muted);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--faint);
   text-align: center;
 }
 
@@ -628,15 +918,18 @@ html, body {
 #toast {
   position: fixed;
   left: 50%;
-  top: calc(env(safe-area-inset-top, 0px) + 58px);
+  top: calc(var(--safe-t) + 84px);
   transform: translate(-50%, -12px);
-  padding: 9px 15px;
+  padding: 9px 16px;
   border-radius: 999px;
-  background: rgba(12, 13, 16, 0.92);
+  background: rgba(11, 12, 16, 0.78);
   border: 1px solid var(--hair);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
   font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.08em;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
   opacity: 0;
   pointer-events: none;
   transition: opacity .18s, transform .18s;
@@ -648,39 +941,284 @@ html, body {
 /* ---------------------------------------------------------------- responsive */
 
 @media (max-width: 460px) {
-  .brand span { display: none; }
-  .stats { gap: 7px; font-size: 10px; }
-  #mask-badge {
-  padding: 2px 7px;
-  border-radius: 5px;
-  border: 1px solid rgba(255, 255, 255, 0.35);
+  .topbar { gap: 10px; }
+  /* Four toggles plus the stats do not leave room for the wordmark on a
+     phone, and by then the camera is running and the app is the picture. */
+  .brand { display: none; }
+  .stats { gap: 8px; font-size: 9.5px; }
+  .segment button { padding: 7px 10px; font-size: 11px; }
+  .rail { left: 7px; gap: 7px; padding: 8px 7px; }
+  .air { width: 46px; height: 46px; }
+  .hue { width: 30px; height: 96px; }
+  .dock { padding: 12px 14px calc(var(--safe-b) + 12px); gap: 10px; }
+  .dock-row { gap: 12px; }
+  .fx-name { font-size: 13.5px; }
+  .fx-pct { font-size: 17px; }
+  #record, #record svg { width: 56px; height: 56px; }
+  #hint { font-size: 8.5px; letter-spacing: 0.1em; bottom: 112px; }
+  #stage.has-shots #hint { bottom: 172px; }
+
+  .overlay { padding: calc(var(--safe-t) + 24px) 18px calc(var(--safe-b) + 24px); }
+  /* Two micro-labels do not fit a phone header without wrapping; the build
+     stamp is the expendable one. */
+  #start .eyebrow.dim { display: none; }
+  .title { margin-top: 20px; }
+  .lede { font-size: 14px; margin-bottom: 26px; }
+  .how li { grid-template-columns: 58px 1fr; gap: 11px; font-size: 12px; }
+}
+
+/* On the narrowest phones the toggles and the clear count win the top row
+   outright: by then the camera is running, and the wordmark is already on the
+   start screen and on the installed app's own icon. */
+@media (max-width: 360px) {
+  .segment button { padding: 6px 8px; font-size: 10.5px; }
+  .segment button.glyph { padding: 6px 7px; }
+  #clear { letter-spacing: 0.08em; padding: 8px 2px; }
+}
+
+/* --------------------------------------------------------------- viewer */
+
+/* The photo carousel is its own layout, not a .panel — it wants the whole
+   viewport, with the row of cards as the only thing in the middle. */
+.viewer {
+  grid-template-rows: auto 1fr auto;
+  place-items: stretch;
+  gap: 18px;
+  overflow: hidden;
+  padding: calc(var(--safe-t) + 18px) 20px calc(var(--safe-b) + 20px);
+}
+
+.viewer-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--hair);
+}
+
+/* The stage. `perspective` here rather than on the cards, so every card shares
+   one vanishing point and the row reads as a single receding object. */
+.carousel {
+  position: relative;
+  perspective: 1500px;
+  perspective-origin: 50% 50%;
+  touch-action: pan-y;
+  cursor: grab;
+  min-height: 0;
+}
+
+.carousel.dragging { cursor: grabbing; }
+
+.card {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  margin: 0;
+  height: min(100%, 620px);
+  min-height: 42vh;
+  width: auto;
+  max-width: 86vw;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #000;
+  box-shadow: 0 0 0 1px var(--hair-2), 0 30px 80px rgba(0, 0, 0, 0.7);
+  transform-origin: center center;
+  transition: transform .42s cubic-bezier(.3,.7,.2,1), opacity .42s;
+  will-change: transform;
+  cursor: pointer;
+}
+
+/* Mid-drag the cards follow the finger, so an easing curve would fight it. */
+.carousel.dragging .card { transition: none; }
+
+.card.front { cursor: default; box-shadow: 0 0 0 1px rgba(255,255,255,.34), 0 36px 90px rgba(0,0,0,.75); }
+
+.card img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.viewer-nav {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  padding: 0 10px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.arrow {
+  pointer-events: auto;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  padding: 0 0 3px;
+  border: 1px solid var(--hair);
+  border-radius: 50%;
+  background: var(--glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   color: var(--ink);
-  letter-spacing: 0.16em;
-  font-size: 9px;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  transition: opacity .18s, border-color .18s;
 }
 
-#mask-badge[hidden] { display: none; }
+.arrow:hover { border-color: var(--hair-2); }
+.arrow:disabled { opacity: 0.22; cursor: default; }
 
-#mask-badge.charging {
-  color: #07080a;
-  background: var(--ink);
-  border-color: var(--ink);
-  font-weight: 700;
+.viewer-actions {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1fr;
+  gap: 8px;
+  width: min(430px, 100%);
+  justify-self: center;
 }
 
-.pill { padding: 6px 9px; font-size: 10px; }
-  .slot { padding: 8px 10px; gap: 6px; }
-  .fx-name { font-size: 11px; letter-spacing: 0.05em; }
-  .meter { height: 8px; }
-  #record, #record svg { width: 58px; height: 58px; }
+.viewer-actions:has(#photo-share[hidden]) { grid-template-columns: 1.3fr 1fr; }
+
+@media (max-width: 460px) {
+  .card { max-width: 78vw; }
+  .arrow { width: 38px; height: 38px; font-size: 20px; }
 }
 
 @media (min-width: 900px) {
-  .dock { padding: 22px 22px calc(var(--safe-b) + 22px); gap: 18px; }
-  .slot { max-width: 300px; }
+  .dock { padding: 18px 26px calc(var(--safe-b) + 18px); }
+  .dock-row { gap: 28px; }
+  .slot { max-width: 320px; }
   #slot-2 { justify-self: end; }
+}
+
+/* On a wide screen the single centred column left most of the page empty and
+   pushed the button below the fold. Two columns: the pitch on the left, the
+   reference material on the right, one shared rule across the top. */
+@media (min-width: 900px) {
+  /* Not the viewer: it drives its own rows and needs the middle one to
+     stretch, and this rule would otherwise win on source order. */
+  .overlay:not(.viewer) { place-items: center; padding: 40px; }
+
+  .panel {
+    width: min(1080px, 100%);
+    display: grid;
+    grid-template-columns: minmax(300px, 0.92fr) minmax(0, 1.08fr);
+    column-gap: 72px;
+    align-items: start;
+  }
+
+  .panel-top { grid-column: 1 / -1; margin-bottom: 4px; }
+  .title, .lede, .note { grid-column: 1; }
+  .panel > .cta { grid-column: 1; }
+  /* Rows: 1 is the header, then title / lede / cta / note. */
+  .detail { grid-column: 2; grid-row: 2 / span 4; }
+
+  .panel::before { width: 420px; height: 340px; top: -150px; left: -110px; }
+
+  .title { font-size: clamp(58px, 5.4vw, 72px); margin: 34px 0 18px; }
+  .lede { font-size: 16.5px; margin-bottom: 34px; }
+  /* Scoped to the start panel's lead column — the viewer's own buttons are
+     laid out by .viewer-actions and must not inherit this. */
+  .panel > .cta { width: auto; min-width: 230px; justify-self: start; padding: 16px 34px; }
+  .note { text-align: left; max-width: 34ch; margin-top: 18px; }
+
+  .block:last-child { margin-bottom: 0; }
+  .detail .block:first-child { margin-top: 4px; }
+  .how li { padding: 9px 0; }
+}
+
+/* ------------------------------------------------------- landscape phone */
+
+/* A phone on its side is ~390px tall: the portrait column does not fit, and the
+   start screen's list would be most of a page of scrolling. Same two-column
+   idea as the desktop layout, everything wound in. */
+@media (orientation: landscape) and (max-height: 540px) {
+  .overlay { place-items: center; padding: 14px 20px; }
+
+  .panel {
+    width: min(920px, 100%);
+    display: grid;
+    grid-template-columns: minmax(230px, 0.85fr) minmax(0, 1.15fr);
+    column-gap: 34px;
+    align-items: start;
+  }
+
+  .panel-top { grid-column: 1 / -1; padding-bottom: 8px; }
+  .title, .lede, .note { grid-column: 1; }
+  .panel > .cta { grid-column: 1; width: auto; justify-self: start; min-width: 190px; }
+  .detail { grid-column: 2; grid-row: 2 / span 4; }
+
+  .title { font-size: clamp(30px, 6.5vw, 40px); margin: 12px 0 8px; }
+  .lede { font-size: 13px; margin-bottom: 14px; line-height: 1.45; }
+  .note { margin-top: 10px; font-size: 11px; text-align: left; }
+  .block { margin-bottom: 14px; }
+  .label { margin-bottom: 8px; }
+  .how li { padding: 5px 0; font-size: 11.5px; line-height: 1.35; }
+  .rack { gap: 6px 14px; }
+  .panel::before { display: none; }
+
+  /* The dock and top bar eat height that landscape does not have to spare. */
+  .topbar { padding: calc(var(--safe-t) + 8px) 16px 14px; }
+  .dock { padding: 8px 16px calc(var(--safe-b) + 8px); gap: 8px; }
+  #record, #record svg { width: 46px; height: 46px; }
+  .rec-dot { width: 20px; height: 20px; margin: -10px 0 0 -10px; }
+  #record.recording .rec-dot { width: 15px; height: 15px; margin: -7.5px 0 0 -7.5px; }
+  #rec-time { font-size: 9px; height: 10px; }
+  .strip { height: 40px; }
+  .fx-name { font-size: 13px; }
+  .fx-pct { font-size: 16px; }
+  #hint { bottom: 92px; }
+  #stage.has-shots #hint { bottom: 138px; }
+
+  .viewer { gap: 10px; padding: calc(var(--safe-t) + 10px) 18px calc(var(--safe-b) + 10px); }
+  .viewer-top { padding-bottom: 8px; }
+  .card { min-height: 0; max-width: 46vw; }
+  .viewer-actions { width: min(380px, 100%); }
+  /* Centred, the rail would run 105->285 into a dock that starts at 264.
+     Anchored under the top bar instead it sits 52->232, clear of both. */
+  .rail {
+    left: 8px;
+    top: calc(var(--safe-t) + 46px);
+    transform: none;
+    gap: 5px;
+    padding: 7px 6px;
+  }
+  .air { width: 40px; height: 40px; }
+  .air-label { font-size: 7px; letter-spacing: 0.1em; }
+  .hue { width: 26px; height: 58px; }
+  .hue-thumb { width: 20px; height: 20px; margin: -10px 0 0 -10px; }
+}
+
+/* Keyboard users get a visible ring; pointer users never see it. */
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.air:focus-visible,
+.hue:focus-visible,
+.shot:focus-visible { outline-offset: 3px; }
+
+/* On a phone the reference list is nine rows deep, which pushed the one thing
+   this screen exists for below the fold. Primary action first, reading after. */
+@media (max-width: 899px) and (min-height: 541px) {
+  .panel { display: flex; flex-direction: column; }
+  .panel-top { order: 0; }
+  .title { order: 1; }
+  .lede { order: 2; }
+  .panel > .cta { order: 3; }
+  .note { order: 4; }
+  .detail { order: 5; margin-top: 28px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
+  .card { transition: none !important; }
 }

@@ -8,19 +8,29 @@
  * six second wait and an instant one on a phone.
  */
 
-const VERSION = 'pv-2026-09-23';
+const VERSION = 'pv-2026-09-23n';
 const SHELL = [
   './',
   './index.html',
-  './style.css',
-  './app.js?v=10',
-  './effects.js?v=10',
+  './style.css?v=7',
+  './app.js?v=23',
+  './effects.js?v=11',
   './manifest.webmanifest',
   './icon-192.png',
   './icon-512.png',
+  // Small enough to precache, and a silent app offline would look broken.
+  './sounds/button.wav',
+  './sounds/tap_03.wav',
+  './sounds/toggle_on.wav',
+  './sounds/toggle_off.wav',
+  './sounds/select.wav',
+  './sounds/disabled.wav',
 ];
 
-const IMMUTABLE = ['cdn.jsdelivr.net', 'storage.googleapis.com'];
+// Google Fonts is versioned behind immutable URLs, so cache-first keeps the
+// typography intact offline instead of falling back to the system stack.
+const IMMUTABLE = ['cdn.jsdelivr.net', 'storage.googleapis.com',
+                   'fonts.googleapis.com', 'fonts.gstatic.com'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

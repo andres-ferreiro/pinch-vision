@@ -15,17 +15,41 @@
 <meta name="mobile-web-app-capable" content="yes">
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <link rel="preconnect" href="https://storage.googleapis.com" crossorigin>
-<link rel="stylesheet" href="style.css">
+<!-- Space Grotesk for anything read as language, JetBrains Mono for anything
+     read as a measurement. Two faces, one voice. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="style.css?v=7">
 </head>
 <body>
 
 <main id="stage">
   <video id="feed" playsinline muted autoplay></video>
   <canvas id="view"></canvas>
+  <canvas id="paint"></canvas>
   <canvas id="overlay"></canvas>
 
+  <!-- Reachable two ways: tap it, or hold a fingertip over it in the camera. -->
+  <div class="rail" id="rail">
+    <button id="lock" class="air" aria-pressed="false" title="fix the current look">
+      <span class="air-label">LOCK</span>
+    </button>
+    <button id="draw" class="air" aria-pressed="false" title="tap: draw mode · hold: clear the drawing">
+      <span class="air-label">DRAW</span>
+    </button>
+    <button id="brush" class="air draw-only" title="brush style">
+      <span class="air-label">LINE</span>
+    </button>
+    <div id="hue" class="hue draw-only" role="slider" tabindex="0"
+         aria-label="draw colour" aria-valuemin="0" aria-valuemax="360">
+      <span class="hue-thumb"></span>
+    </div>
+  </div>
+
   <header class="topbar">
-    <div class="brand">PINCH<span>VISION</span></div>
+    <div class="brand">Pinch<span>Vision</span></div>
+
     <div class="stats">
       <span id="fps">—<b>fps</b></span>
       <span class="hands" aria-label="hands tracked">
@@ -33,24 +57,33 @@
       </span>
       <span id="mask-badge" hidden>WINDOW</span>
     </div>
+
     <div class="tools">
-      <button id="skel" class="pill" aria-pressed="true" title="hand skeleton">SKEL</button>
-      <button id="blend" class="pill" aria-pressed="false" title="blend mode">BLEND</button>
-      <button id="swap" class="pill" aria-pressed="false" title="swap hands">⇄</button>
-      <button id="clear" class="pill danger" hidden title="tap: remove last · hold: remove all">CLEAR 0</button>
+      <div class="segment">
+        <button id="skel" aria-pressed="true" title="hand skeleton">Skel</button>
+        <button id="blend" aria-pressed="false" title="blend mode">Blend</button>
+        <button id="swap" aria-pressed="false" title="swap hands" class="glyph">⇄</button>
+        <button id="sound" aria-pressed="true" title="sound" class="glyph">♪</button>
+      </div>
+      <button id="clear" hidden title="tap: remove last · hold: remove all">CLEAR 0</button>
     </div>
   </header>
 
   <p id="hint"></p>
 
   <div class="dock">
+    <div class="strip" id="strip" hidden aria-label="photos"></div>
+
+    <div class="dock-row">
     <button class="slot idle" id="slot-1">
-      <span class="slot-top">
+      <span class="slot-head">
         <span class="dot"></span>
         <span class="slot-hand">LEFT</span>
+      </span>
+      <span class="slot-main">
+        <span class="fx-name">THERMAL</span>
         <span class="fx-pct">0</span>
       </span>
-      <span class="fx-name">THERMAL</span>
       <span class="meter"></span>
     </button>
 
@@ -66,50 +99,67 @@
     </div>
 
     <button class="slot idle" id="slot-2">
-      <span class="slot-top">
+      <span class="slot-head">
         <span class="dot"></span>
         <span class="slot-hand">RIGHT</span>
+      </span>
+      <span class="slot-main">
+        <span class="fx-name">NIGHT VISION</span>
         <span class="fx-pct">0</span>
       </span>
-      <span class="fx-name">NIGHT VISION</span>
       <span class="meter"></span>
     </button>
+    </div>
   </div>
 </main>
 
-<div id="toast"></div>
+<div id="toast" role="status" aria-live="polite"></div>
 
 <section id="start" class="overlay">
   <div class="panel">
     <div class="panel-top">
-      <span class="eyebrow">GESTURE-CONTROLLED OPTICS</span>
-      <span class="eyebrow dim">WEBGL · MEDIAPIPE</span>
+      <span class="eyebrow">Gesture-controlled optics</span>
+      <span class="eyebrow dim">WebGL · MediaPipe</span>
     </div>
 
-    <h1 class="title">PINCH<span>VISION</span></h1>
-    <p class="lede">Your hands are the controls. Eight real-time looks, driven
+    <h1 class="title">Pinch<span>Vision</span></h1>
+    <p class="lede">Your hands are the controls. Nine real-time looks, driven
       entirely by how you pinch.</p>
 
-    <div class="rack" id="rack-strip" aria-label="effect rack"></div>
+    <div class="detail">
+    <div class="block">
+      <span class="label">The rack</span>
+      <div class="rack" id="rack-strip" aria-label="effect rack"></div>
+    </div>
 
-    <ul class="how">
-      <li><span class="key k-pinch">PINCH</span>
-        <span>index to thumb — tighter pinch, stronger effect</span></li>
-      <li><span class="key k-tap">TAP</span>
-        <span>thumb to pinky — next effect for that hand</span></li>
-      <li><span class="key k-rec">REC</span>
-        <span>up to 20s, saved straight to your device</span></li>
-      <li><span class="key k-blend">BLEND</span>
-        <span>one hand sweeps the rack, the other fades it</span></li>
-      <li><span class="key k-window">WINDOW</span>
-        <span>touch both hands' fingertips — opens a window</span></li>
-      <li><span class="key k-pin">PIN</span>
-        <span>hold thumb to ring finger 1s — the window stays put</span></li>
-      <li><span class="key k-clear">CLEAR</span>
-        <span>turn both palms away 1s — dismiss, or wipe them all</span></li>
-    </ul>
+    <div class="block">
+      <span class="label">Gestures</span>
+      <ul class="how">
+        <li><span class="key k-pinch">Pinch</span>
+          <span>Index to thumb — tighter pinch, stronger effect</span></li>
+        <li><span class="key k-tap">Tap</span>
+          <span>Thumb to pinky — next effect for that hand</span></li>
+        <li><span class="key k-rec">Rec</span>
+          <span>Up to 20s, saved straight to your device</span></li>
+        <li><span class="key k-blend">Blend</span>
+          <span>One hand sweeps the rack, the other fades it</span></li>
+        <li><span class="key k-window">Window</span>
+          <span>Touch both hands' fingertips — opens a window</span></li>
+        <li><span class="key k-pin">Pin</span>
+          <span>Hold thumb to pinky 1s — the window stays put</span></li>
+        <li><span class="key k-lock">Lock</span>
+          <span>Hold a fingertip on LOCK — freezes the look and the overlays</span></li>
+        <li><span class="key k-draw">Draw</span>
+          <span>Hold DRAW, then pinch to paint — brush and colour appear alongside</span></li>
+        <li><span class="key k-photo">Photo</span>
+          <span>Press index and middle together 0.7s — tap a frame to save</span></li>
+        <li><span class="key k-reset">Reset</span>
+          <span>Close both fists 1s — drops every window, leaves blend mode</span></li>
+      </ul>
+    </div>
+    </div>
 
-    <button id="start-btn" class="cta">START CAMERA</button>
+    <button id="start-btn" class="cta">Start camera</button>
     <p id="start-note" class="note">Nothing leaves your device — the camera feed
       and the tracking both run locally.</p>
   </div>
@@ -118,7 +168,7 @@
 <section id="result" class="overlay" hidden>
   <div class="panel">
     <div class="panel-top">
-      <span class="eyebrow"><i class="led"></i> CLIP READY</span>
+      <span class="eyebrow"><i class="led"></i> Clip ready</span>
       <span class="eyebrow dim" id="clip-meta">—</span>
     </div>
 
@@ -126,15 +176,35 @@
     <div class="clip-fx" id="clip-fx">—</div>
 
     <div class="row">
-      <a id="download" class="cta" download>SAVE</a>
-      <button id="share" class="cta ghost" hidden>SHARE</button>
-      <button id="again" class="cta ghost">BACK</button>
+      <a id="download" class="cta" download>Save</a>
+      <button id="share" class="cta ghost" hidden>Share</button>
+      <button id="again" class="cta ghost">Back</button>
     </div>
+  </div>
+</section>
+
+<section id="photos" class="overlay viewer" hidden>
+  <div class="viewer-top">
+    <span class="eyebrow" id="photo-count">—</span>
+    <span class="eyebrow dim" id="photo-meta"></span>
+  </div>
+
+  <div class="carousel" id="carousel" aria-label="photos"></div>
+
+  <div class="viewer-nav">
+    <button id="photo-prev" class="arrow" aria-label="previous photo">‹</button>
+    <button id="photo-next" class="arrow" aria-label="next photo">›</button>
+  </div>
+
+  <div class="viewer-actions">
+    <button id="photo-save" class="cta">Save</button>
+    <button id="photo-share" class="cta ghost" hidden>Share</button>
+    <button id="photo-close" class="cta ghost">Close</button>
   </div>
 </section>
 
 <!-- Bump ?v= on every deploy: Pages caches for 10 minutes, and a new
      index.html paired with a stale app.js is a real failure mode. -->
-<script type="module" src="app.js?v=10"></script>
+<script type="module" src="app.js?v=23"></script>
 </body>
 </html>

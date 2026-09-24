@@ -16,6 +16,7 @@ export const EFFECTS = [
   { id: 'glitch', name: 'GLITCH', short: 'GLTCH', color: '#ff5a5a' },
   { id: 'ascii', name: 'ASCII', short: 'ASCII', color: '#d8ffc8' },
   { id: 'halftone', name: 'HALFTONE', short: 'HALFT', color: '#e6e6e6' },
+  { id: 'pixel', name: 'PIXELATE', short: 'PIXEL', color: '#ffd93c' },
   { id: 'invert', name: 'INVERT', short: 'INVRT', color: '#8c50ff' },
 ];
 
@@ -293,6 +294,30 @@ void main() {
   fragColor = vec4(blend(base, paper * ink, uAmount), 1.0);
 }`;
 
+const PIXELATE = HEAD + `
+void main() {
+  // Block size sweeps from a single pixel — which is no change at all — up to a
+  // coarse grid. Squared, so the bottom of the dial stays subtle and the top
+  // end is where it goes properly chunky.
+  float maxBlock = max(uRes.x, uRes.y) / 26.0;
+  float block = mix(1.0, maxBlock, uAmount * uAmount);
+
+  // Snapping happens in pixel space, not UV space: quantising UVs directly
+  // would stretch the cells into rectangles on any frame that is not square.
+  vec2 px = vUv * uRes;
+  vec2 cell = (floor(px / block) + 0.5) * block;
+
+  vec3 base = texture(uTex, vUv).rgb;
+  vec3 blocky = texture(uTex, cell / uRes).rgb;
+
+  // Fewer colours as well as fewer pixels. Blocks on their own read as a blur;
+  // it is the flattened palette that makes it look drawn rather than defocused.
+  float steps = mix(32.0, 6.0, uAmount);
+  blocky = floor(blocky * steps + 0.5) / steps;
+
+  fragColor = vec4(blend(base, blocky, uAmount), 1.0);
+}`;
+
 const INVERT = HEAD + `
 void main() {
   vec3 base = texture(uTex, vUv).rgb;
@@ -306,7 +331,7 @@ void main() {
 const SHADERS = {
   src: SRC, present: PRESENT, mixer: MIXER, maskMix: MASK_MIX,
   thermal: THERMAL, night: NIGHT, edge: EDGE, glitch: GLITCH,
-  ascii: ASCII, halftone: HALFTONE, invert: INVERT,
+  ascii: ASCII, halftone: HALFTONE, pixel: PIXELATE, invert: INVERT,
   echoState: ECHO_STATE, echoComp: ECHO_COMP,
 };
 
