@@ -523,13 +523,28 @@ same two-column split as the desktop one with everything wound in, and the top
 bar, dock, record button, strip and photo viewer all give back the height that
 landscape does not have to spare.
 
+Filling the screen in landscape happens in two places, because the first one is
+allowed to fail. `reshapeCamera()` asks the camera to turn with the phone, and
+`fitFor()` fills the screen whatever shape the stream turns out to be — on a
+phone held sideways it crops rather than letterboxing, since a thumbnail of
+picture stranded in a field of black is worse than losing the top and bottom.
+With the reshape working, 82% of the frame height stays visible; with the camera
+refusing outright, 26% does, and the screen is still full either way. Portrait
+is untouched: a landscape stream on a portrait phone still letterboxes rather
+than cutting hands out of view.
+
 The camera is **re-shaped on rotation**. The stream is asked for in the shape of
 the screen, but that shape used to be chosen once, when it opened: start in
 portrait, rotate to landscape, and a 720x1280 stream was left on an 852x393
 screen, where `fitFor()` computes `0.26` against its `0.74` threshold and can
 only pillarbox it into a sliver with most of the display black. `applyConstraints`
 is tried first and a fresh stream opened if the camera ignores it, which plenty
-do for a swap of their own sensor orientation.
+do for a swap of their own sensor orientation — iOS in particular is entitled to
+hand back the same sensor orientation no matter what `ideal` it is given, which
+is why `fitFor()` has to cope on its own rather than trusting this to work.
+Rotation is read as three signals (the media query, `resize` and
+`orientationchange`) on a delay, since iOS reports the track's new dimensions a
+beat after the rotation and a PWA does not always deliver the first of them.
 
 A notch sits on one of the short edges in landscape, so `safe-area-inset-left`
 and `-right` stop being zero there. Everything pinned to an edge now clears

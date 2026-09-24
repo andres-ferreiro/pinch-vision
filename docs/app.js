@@ -866,9 +866,28 @@ function windowPolygon() {
  * `object-fit: cover` — and for a hand app that means your hands are tracked
  * but not visible. When the aspects disagree badly, letterbox instead.
  */
+/**
+ * Letterbox or crop.
+ *
+ * A mild mismatch crops: it costs a sliver of the edges and keeps the picture
+ * filling the frame. A severe one letterboxes, so a portrait phone does not cut
+ * hands out of view.
+ *
+ * Except on a phone held sideways. There a portrait stream against a landscape
+ * screen is a fourfold mismatch, and honouring it means a thumbnail of picture
+ * stranded in a field of black — which is what "not fullscreen" actually looked
+ * like. Fill the screen and lose the top and bottom instead; hands held up
+ * beside a face survive that crop, and an empty screen helps nobody.
+ *
+ * This is the backstop for `reshapeCamera()`: when the camera agrees to turn
+ * with the phone there is barely anything to crop, and when it refuses — which
+ * iOS is entitled to do — the screen still fills.
+ */
 function fitFor(rw, rh, cw, ch) {
   const ratio = (rw / rh) / (cw / ch);
-  return (ratio > 1.35 || ratio < 0.74) ? 'contain' : 'cover';
+  if (ratio <= 1.35 && ratio >= 0.74) return 'cover';
+  const landscapePhone = ch < 540 && cw > ch;
+  return landscapePhone ? 'cover' : 'contain';
 }
 
 function sizeFor(video) {
@@ -2150,6 +2169,9 @@ async function begin() {
   ui.start.hidden = true;
   state.running = true;
   state.lastFrame = performance.now();
+  // A stream can come back in the wrong orientation on the first try, and with
+  // no rotation to follow there would be nothing to correct it.
+  scheduleReshape();
   setPill(ui.skelBtn, state.skeleton);
   setPill(ui.blendBtn, state.mode === 'blend');
   setPill(ui.swapBtn, state.swap);
@@ -2323,7 +2345,6 @@ function enterFullscreen() {
 }
 
 function syncFullscreen() {
-  reshapeCamera();
   if (wantsFullscreen()) {
     enterFullscreen();
     noteFullscreenLimit();
@@ -2343,7 +2364,25 @@ addEventListener('pointerdown', () => {
   enterFullscreen();
 }, { capture: true });
 
-landscapeQuery.addEventListener?.('change', syncFullscreen);
+let reshapeTimer = null;
+
+/**
+ * iOS reports the track's new dimensions a beat after the rotation, so reading
+ * them the moment the query fires gets the old ones. Both the media query and a
+ * plain resize are treated as the same signal, since a PWA does not always
+ * deliver the first.
+ */
+function scheduleReshape() {
+  clearTimeout(reshapeTimer);
+  reshapeTimer = setTimeout(reshapeCamera, 450);
+}
+
+landscapeQuery.addEventListener?.('change', () => {
+  syncFullscreen();
+  scheduleReshape();
+});
+addEventListener('resize', scheduleReshape);
+addEventListener('orientationchange', scheduleReshape);
 document.addEventListener('fullscreenchange', () => {
   if (!document.fullscreenElement) weWentFullscreen = false;
 });
